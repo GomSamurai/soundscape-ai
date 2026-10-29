@@ -478,13 +478,10 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
               curve *= Math.max(0, 1 / (1 + (ratio - 1) * 3));
             }
 
-            // Organic multi-harmonic spatial breathing (fluid, natural, non-periodic)
-            const m1 = Math.sin(now * 1.5 + i * 0.15) * 0.12;
-            const m2 = Math.cos(now * 0.8 - i * 0.24) * 0.10;
-            const m3 = Math.sin(now * 2.6 + i * 0.36) * 0.06;
-            const flutter = 1.0 + m1 + m2 + m3;
-
-            ytEnergy += curve * flutter * trVol * 190;
+            // Studio acoustic volume response: steady, clean frequency curve
+            // ZERO travelling spatial waves (no phase shifts across frequency index i)
+            const breath = 0.97 + Math.sin(now * 1.2) * 0.03;
+            ytEnergy += curve * breath * trVol * 180;
           }
           ytEnergy = ytEnergy / Math.max(1, Math.sqrt(activeYtTracks.length));
           targetVal = Math.min(255, ytEnergy * gainFactor);
@@ -552,14 +549,14 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
 
           if (barHeight > 0.5) {
             const grad = ctx.createLinearGradient(0, h, 0, y);
-            grad.addColorStop(0, `${colors[0]}40`);
-            grad.addColorStop(0.5, colors[1]);
-            grad.addColorStop(1, normIdx < 0.3 ? colors[0] : normIdx < 0.7 ? colors[1] : colors[2]);
+            grad.addColorStop(0, `${colors[0]}25`);
+            grad.addColorStop(0.55, colors[0]);
+            grad.addColorStop(1, colors[1]);
 
             ctx.fillStyle = grad;
             if (glowBlur > 0) {
-              ctx.shadowColor = colors[1];
-              ctx.shadowBlur = glowBlur * 0.6;
+              ctx.shadowColor = colors[0];
+              ctx.shadowBlur = glowBlur * 0.5;
             }
             ctx.beginPath();
             ctx.roundRect(x, y, barWidth, barHeight, [2, 2, 0, 0]);

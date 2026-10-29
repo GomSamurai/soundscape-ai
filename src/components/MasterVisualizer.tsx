@@ -112,8 +112,7 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
     return () => window.removeEventListener('visualizer_settings_changed', handleSync);
   }, []);
 
-  // Peak Meter
-  const [peakDb, setPeakDb] = useState<number>(-60);
+  // Stereo correlation
   const [stereoCorr, setStereoCorr] = useState<number>(1.0);
 
   // References for Animation & Memory
@@ -390,11 +389,6 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
         if (i % 2 === 0) leftEnergy += sample;
         else rightEnergy += sample;
       }
-
-      const realDb = peakSample > 0.002
-        ? Math.min(0, Math.max(-60, Math.round(20 * Math.log10(peakSample))))
-        : -60;
-      setPeakDb(realDb);
 
       const totalEnergy = leftEnergy + rightEnergy;
       if (totalEnergy > 0.05) {
@@ -986,22 +980,18 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
           ) : (
             /* Floating HUD with auto-dimming when mouse is idle */
             <div className="absolute top-2 left-2 sm:left-3 right-2 sm:right-3 z-10 flex flex-wrap items-center justify-between gap-1.5 pointer-events-none transition-all duration-300 opacity-40 hover:opacity-100 group-hover:opacity-100 focus-within:opacity-100">
-              {/* Left Pill: Live dBFS, indicator & Palette cycler */}
-              <div className="flex items-center gap-1.5 shrink-0 pointer-events-auto bg-slate-950/75 backdrop-blur-md px-2 py-1 rounded-xl border border-slate-800/80 shadow-lg">
+              {/* Left Pill: Indicator & Palette cycler */}
+              <div className="flex items-center gap-2 shrink-0 pointer-events-auto bg-slate-950/75 backdrop-blur-md px-2.5 py-1 rounded-xl border border-slate-800/80 shadow-lg">
                 <div className="flex items-center gap-1.5">
                   <span
                     className={`w-2 h-2 rounded-full transition-colors ${
                       isPlaying ? 'bg-emerald-400 shadow-[0_0_8px_#10B981]' : 'bg-slate-600'
                     }`}
                   />
-                  <span className="text-[10px] font-bold tracking-wider uppercase text-slate-200 hidden xs:inline">
+                  <span className="text-[10px] font-bold tracking-wider uppercase text-slate-200">
                     MÁSTER
                   </span>
                 </div>
-
-                <span className="text-[10px] font-mono tabular-nums text-cyan-300 font-bold bg-cyan-950/70 px-1.5 py-0.5 rounded border border-cyan-800/40">
-                  {isPlaying ? `${peakDb} dBFS` : 'STANDBY'}
-                </span>
 
                 {/* Quick Palette Cycler Button */}
                 <button

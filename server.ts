@@ -133,10 +133,12 @@ app.post('/api/gemini/verify-key', async (req, res) => {
   }
 });
 
-// Verified fallback video dictionary in case of network timeouts
 const VERIFIED_FALLBACKS: Record<string, { id: string; title: string }> = {
   rain: { id: 'mPZkdNFkNps', title: 'Rain on Window with Thunder 8K' },
   fire: { id: 'L_LUpnjgPso', title: 'Fireplace Sounds 4K' },
+  classical: { id: 'RXhE9oyni_o', title: 'Classical Music for Salon & Reading' },
+  banquet: { id: '_IqVz1fZ2qs', title: 'Grand Banquet Dinner & Fine China Ambience' },
+  fireplace_palace: { id: '9JpcEtLPMaA', title: 'Luxury Palace Fireplace Ambience' },
   jazz: { id: 'Dx5qFachd3A', title: 'Cozy Paris Coffee Shop Jazz' },
   lofi: { id: 'DWcJFNfaw9c', title: 'Lofi Hip Hop Radio Beats' },
   cyberpunk: { id: 'd00VwBAoiF0', title: 'Blade Runner Cyberpunk Rain' },
@@ -144,6 +146,7 @@ const VERIFIED_FALLBACKS: Record<string, { id: string; title: string }> = {
   blizzard: { id: '7BrIJrjxVxA', title: 'Blizzard & Snowstorm Ambience' },
   tibetan: { id: 'By6zerfldXE', title: 'Tibetan Singing Bowls 432Hz' },
   forest: { id: 'xNN7iTA57jM', title: 'Birds in Forest Spring Ambience' },
+  tavern: { id: '403ksGqDqN4', title: 'Medieval Tavern Warm Hearth & Flute' },
 };
 
 // Helper: Live YouTube Search scraper with embed validation
@@ -428,14 +431,16 @@ app.post('/api/gemini/generate-soundscape', async (req, res) => {
   if (activeAi) {
     try {
       const systemInstruction = `Eres el Diseñador Acústico e Ingeniero de Audio Principal de Soundscape AI.
-Tu tarea es convertir descripciones creativas del usuario en una receta multicanal inmersiva que combine videos de YouTube reales y capas de sintetizador procedimental.
+Tu misión es DESCOMPONER profundamente la escena sensorial del usuario en capas acústicas reales y específicas (foley tangible, música de época o género, atmósfera ambiental de sala y texturas espaciales).
+NUNCA devuelvas sonidos genéricos de lluvia si el usuario no los pidió expresamente.
 
-Para CADA canal de YouTube:
-- Proporciona en 'youtubeSearchQuery' un término de búsqueda muy descriptivo y en inglés o español para encontrar videos ambientales de alta calidad (ej: "medieval tavern ambient lute music", "cyberpunk rain tokyo blade runner", "deep space ambient drone 4k", "forest stream gentle birds chirping", "lofi hip hop study beats cafe", "tibetan singing bowls 432hz").
-- Ajusta el panorama estéreo 'pan' (-0.8 a 0.8), volumen (0.2 a 0.85), frecuencia de corte 'filterCutoff' (500 a 18000 Hz), envío de reverberación 'reverbSend' (0.1 a 0.7), envío de delay/eco 'delaySend' (0 a 0.6), y calidez analógica de saturación 'tapeWarmth' (0 a 0.5).
-
-Para capas de sintetizador procedimental:
-- Usa soundKey: 'binaural_theta', 'binaural_alpha', 'binaural_delta', 'drone_sub', 'pink_noise', 'brown_noise', 'white_noise', 'ocean', 'rain', 'wind', 'vinyl'.`;
+Reglas de Composición:
+1. Descompón la escena en 3 a 5 canales acústicos bien balanceados.
+2. Al menos 2 o 3 canales DEBEN ser videos de YouTube (type: 'youtube_video').
+3. Para cada canal de YouTube, proporciona en 'youtubeSearchQuery' términos en INGLÉS o ESPAÑOL altamente efectivos para encontrar sesiones ambientales largas en YouTube (ejemplos: "classical chamber music string quartet salon ambience", "fancy banquet dinner party crystal glasses silverware murmur ambience", "luxury palace fireplace crackling salon ambience", "medieval tavern lute campfire ambience", "cyberpunk blade runner synth ambient").
+4. Para cada canal, proporciona un 'customTitle' en español evocador y elegante (ej: "Cuarteto de Cuerdas en el Salón Dorado", "Tintineo de Cristal Baccarat y Murmullo Cortés", "Hogar de Leña en Chimenea Señorial").
+5. Distribuye espacialmente los canales en el campo estéreo (pan de -0.8 a 0.8), con volúmenes armónicos (0.2 a 0.85), ecualización filterCutoff (500 a 18000 Hz) y envíos de reverberación (reverbSend) y calidez analógica (tapeWarmth).
+6. Para capas de sintetizador procedimental (si aplican como base): soundKey: 'binaural_theta', 'binaural_alpha', 'binaural_delta', 'drone_sub', 'pink_noise', 'brown_noise', 'white_noise', 'ocean', 'rain', 'wind', 'vinyl'.`;
 
       let response: any = null;
       const modelsToTry = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
@@ -443,67 +448,67 @@ Para capas de sintetizador procedimental:
         try {
           response = await activeAi.models.generateContent({
             model: mName,
-        contents: `Diseña una composición acústica para esta petición del usuario: "${prompt}".
-Genera entre 3 y 5 canales equilibrados, de los cuales al menos 1 o 2 sean videos de YouTube con términos de búsqueda específicos.
+            contents: `Diseña una composición acústica para esta petición del usuario: "${prompt}".
+Genera entre 3 y 5 canales equilibrados, de los cuales al menos 2 o 3 sean videos de YouTube con términos de búsqueda específicos.
 Pistas previas (evitar duplicados innecesarios): ${JSON.stringify(currentTracks)}.`,
-        config: {
-          systemInstruction,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              name: { type: Type.STRING, description: 'Título evocador del paisaje sonoro' },
-              tagline: { type: Type.STRING, description: 'Subtítulo conciso de 4 a 8 palabras' },
-              concept: { type: Type.STRING, description: 'Descripción sensorial poética del entorno (2-3 oraciones)' },
-              category: { type: Type.STRING, description: 'Categoría principal' },
-              tags: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING },
-                description: 'Etiquetas acústicas',
-              },
-              visualTheme: {
-                type: Type.STRING,
-                description: 'Tema de color visual: cyan, amber, emerald, violet, sky, rose',
-              },
-              binauralFreqHz: { type: Type.NUMBER, description: 'Frecuencia binaural recomendada en Hz' },
-              masterReverb: { type: Type.NUMBER, description: 'Reverberación master (0.0 a 1.0)' },
-              masterDelay: { type: Type.NUMBER, description: 'Delay master (0.0 a 0.7)' },
-              masterWarmth: { type: Type.NUMBER, description: 'Calidez analógica master (0.0 a 0.6)' },
-              channels: {
-                type: Type.ARRAY,
-                description: 'Canales recomendados',
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    type: {
-                      type: Type.STRING,
-                      description: 'Tipo de canal: "youtube_video" o "synthesizer"',
-                    },
-                    youtubeSearchQuery: {
-                      type: Type.STRING,
-                      description: 'Término de búsqueda específico para YouTube si es youtube_video',
-                    },
-                    soundKey: {
-                      type: Type.STRING,
-                      description: 'Identificador base (yt_video, binaural_theta, binaural_alpha, drone_sub, pink_noise, brown_noise, vinyl, rain, ocean, wind)',
-                    },
-                    customTitle: { type: Type.STRING, description: 'Nombre descriptivo del canal en la mezcla' },
-                    volume: { type: Type.NUMBER, description: 'Volumen inicial recomendado (0.1 a 1.0)' },
-                    pan: { type: Type.NUMBER, description: 'Balance estéreo (-1.0 a 1.0)' },
-                    filterCutoff: { type: Type.NUMBER, description: 'Frecuencia de corte de filtro en Hz (200 a 18000)' },
-                    reverbSend: { type: Type.NUMBER, description: 'Envío de reverb (0.0 a 1.0)' },
-                    delaySend: { type: Type.NUMBER, description: 'Envío de eco / delay (0.0 a 1.0)' },
-                    tapeWarmth: { type: Type.NUMBER, description: 'Calidez y saturación de cinta analógica (0.0 a 1.0)' },
-                    role: { type: Type.STRING, description: 'Rol acústico: video principal, atmósfera, cimiento, detalle' },
+            config: {
+              systemInstruction,
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING, description: 'Título evocador del paisaje sonoro' },
+                  tagline: { type: Type.STRING, description: 'Subtítulo conciso de 4 a 8 palabras' },
+                  concept: { type: Type.STRING, description: 'Descripción sensorial poética del entorno (2-3 oraciones)' },
+                  category: { type: Type.STRING, description: 'Categoría principal' },
+                  tags: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                    description: 'Etiquetas acústicas',
                   },
-                  required: ['type', 'customTitle', 'volume', 'pan'],
+                  visualTheme: {
+                    type: Type.STRING,
+                    description: 'Tema de color visual: cyan, amber, emerald, violet, sky, rose',
+                  },
+                  binauralFreqHz: { type: Type.NUMBER, description: 'Frecuencia binaural recomendada en Hz' },
+                  masterReverb: { type: Type.NUMBER, description: 'Reverberación master (0.0 a 1.0)' },
+                  masterDelay: { type: Type.NUMBER, description: 'Delay master (0.0 a 0.7)' },
+                  masterWarmth: { type: Type.NUMBER, description: 'Calidez analógica master (0.0 a 0.6)' },
+                  channels: {
+                    type: Type.ARRAY,
+                    description: 'Canales recomendados',
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        type: {
+                          type: Type.STRING,
+                          description: 'Tipo de canal: "youtube_video" o "synthesizer"',
+                        },
+                        youtubeSearchQuery: {
+                          type: Type.STRING,
+                          description: 'Término de búsqueda específico para YouTube si es youtube_video',
+                        },
+                        soundKey: {
+                          type: Type.STRING,
+                          description: 'Identificador base (yt_video, binaural_theta, binaural_alpha, drone_sub, pink_noise, brown_noise, vinyl, rain, ocean, wind)',
+                        },
+                        customTitle: { type: Type.STRING, description: 'Nombre descriptivo del canal en la mezcla' },
+                        volume: { type: Type.NUMBER, description: 'Volumen inicial recomendado (0.1 a 1.0)' },
+                        pan: { type: Type.NUMBER, description: 'Balance estéreo (-1.0 a 1.0)' },
+                        filterCutoff: { type: Type.NUMBER, description: 'Frecuencia de corte de filtro en Hz (200 a 18000)' },
+                        reverbSend: { type: Type.NUMBER, description: 'Envío de reverb (0.0 a 1.0)' },
+                        delaySend: { type: Type.NUMBER, description: 'Envío de eco / delay (0.0 a 1.0)' },
+                        tapeWarmth: { type: Type.NUMBER, description: 'Calidez y saturación de cinta analógica (0.0 a 1.0)' },
+                        role: { type: Type.STRING, description: 'Rol acústico: video principal, atmósfera, cimiento, detalle' },
+                      },
+                      required: ['type', 'customTitle', 'volume', 'pan'],
+                    },
+                  },
                 },
+                required: ['name', 'tagline', 'concept', 'category', 'tags', 'channels'],
               },
             },
-            required: ['name', 'tagline', 'concept', 'category', 'tags', 'channels'],
-          },
-        },
-      });
+          });
           if (response?.text) break;
         } catch (mErr) {
           console.warn(`Model ${mName} generation failed, trying fallback...`, mErr);
@@ -525,7 +530,10 @@ Pistas previas (evitar duplicados innecesarios): ${JSON.stringify(currentTracks)
     let q1 = `${p} ambience relaxing`;
     let q2 = 'calm atmospheric soundscape 4k';
 
-    if (userWords.includes('lluvia') || userWords.includes('tormenta')) {
+    if (userWords.includes('aristocr') || userWords.includes('banquet') || userWords.includes('lujo') || userWords.includes('palacio') || userWords.includes('clasic') || userWords.includes('salón') || userWords.includes('sobremesa')) {
+      q1 = 'classical chamber music string quartet salon ambience';
+      q2 = 'fancy banquet dinner party crystal glasses silverware murmur ambience';
+    } else if (userWords.includes('lluvia') || userWords.includes('tormenta')) {
       q1 = 'heavy rain thunder window ambience 4k';
       q2 = 'rainy day lofi chill beats';
     } else if (userWords.includes('medieval') || userWords.includes('taberna')) {
@@ -612,13 +620,56 @@ Pistas previas (evitar duplicados innecesarios): ${JSON.stringify(currentTracks)
     };
   }
 
+  // Thematic Fallback Picker
+  function pickThematicFallback(text: string): { id: string; title: string } {
+    const t = text.toLowerCase();
+    if (t.includes('classical') || t.includes('cuarteto') || t.includes('cuerdas') || t.includes('violin') || t.includes('piano') || t.includes('salon')) {
+      return VERIFIED_FALLBACKS.classical;
+    }
+    if (t.includes('banquet') || t.includes('cristal') || t.includes('copas') || t.includes('murmur') || t.includes('comida') || t.includes('plato')) {
+      return VERIFIED_FALLBACKS.banquet;
+    }
+    if (t.includes('chimenea') || t.includes('fire') || t.includes('hogar') || t.includes('palace fireplace') || t.includes('brasa')) {
+      return VERIFIED_FALLBACKS.fireplace_palace;
+    }
+    if (t.includes('tavern') || t.includes('medieval') || t.includes('lute')) {
+      return VERIFIED_FALLBACKS.tavern;
+    }
+    if (t.includes('jazz') || t.includes('cafe') || t.includes('paris')) {
+      return VERIFIED_FALLBACKS.jazz;
+    }
+    if (t.includes('cyberpunk') || t.includes('blade') || t.includes('synth')) {
+      return VERIFIED_FALLBACKS.cyberpunk;
+    }
+    if (t.includes('ocean') || t.includes('mar') || t.includes('olas')) {
+      return VERIFIED_FALLBACKS.ocean;
+    }
+    if (t.includes('snow') || t.includes('blizzard') || t.includes('nieve')) {
+      return VERIFIED_FALLBACKS.blizzard;
+    }
+    if (t.includes('tibetan') || t.includes('meditat') || t.includes('cuenco')) {
+      return VERIFIED_FALLBACKS.tibetan;
+    }
+    if (t.includes('forest') || t.includes('bosque') || t.includes('pajaro')) {
+      return VERIFIED_FALLBACKS.forest;
+    }
+    return VERIFIED_FALLBACKS.rain;
+  }
+
   // Live YouTube Resolution: For every channel with type 'youtube_video', perform REAL LIVE YouTube search!
   const resolvedChannels = [];
 
   for (const ch of parsedRecipe.channels) {
     if (ch.type === 'youtube_video') {
       const query = ch.youtubeSearchQuery || ch.customTitle || prompt;
-      const foundVideos = await searchVerifiedYouTube(query, 1);
+      let foundVideos = await searchVerifiedYouTube(query, 1);
+      
+      // If full query had no embeddable video, try a simplified 3-word query
+      if (!foundVideos || foundVideos.length === 0) {
+        const simplified = query.split(' ').slice(0, 3).join(' ') + ' ambience';
+        foundVideos = await searchVerifiedYouTube(simplified, 1);
+      }
+
       const chosenVideo = foundVideos[0];
 
       if (chosenVideo) {
@@ -630,19 +681,20 @@ Pistas previas (evitar duplicados innecesarios): ${JSON.stringify(currentTracks)
           customTitle: ch.customTitle || chosenVideo.title,
         });
       } else {
-        // Fallback to verified rain
+        const fallbackVid = pickThematicFallback(`${query} ${ch.customTitle || ''}`);
         resolvedChannels.push({
           ...ch,
           soundKey: 'yt_video',
-          youtubeVideoId: VERIFIED_FALLBACKS.rain.id,
-          youtubeThumbnail: `https://img.youtube.com/vi/${VERIFIED_FALLBACKS.rain.id}/hqdefault.jpg`,
-          customTitle: ch.customTitle || VERIFIED_FALLBACKS.rain.title,
+          youtubeVideoId: fallbackVid.id,
+          youtubeThumbnail: `https://img.youtube.com/vi/${fallbackVid.id}/hqdefault.jpg`,
+          customTitle: ch.customTitle || fallbackVid.title,
         });
       }
     } else {
       resolvedChannels.push(ch);
     }
   }
+
 
   parsedRecipe.channels = resolvedChannels;
 

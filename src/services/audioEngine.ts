@@ -353,11 +353,11 @@ class AudioEngine {
       return;
     }
 
-    const hasSolo = tracks.some((t) => t.isSolo);
+    const hasSolo = tracks.some((t) => t.solo);
     const activeYtTracks = tracks.filter((t) => {
       if (t.type !== 'youtube_video') return false;
-      if (t.isMuted) return false;
-      if (hasSolo && !t.isSolo) return false;
+      if (t.muted) return false;
+      if (hasSolo && !t.solo) return false;
       return true;
     });
 

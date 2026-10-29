@@ -114,8 +114,58 @@ export function composeSemanticSoundscape(prompt: string): AISoundscapeResponse 
     });
   }
 
+  // 3b. Detect Aristocratic / Palace / Banquet / Luxury Salon
+  if (p.includes('aristocr') || p.includes('banquet') || p.includes('lujo') || p.includes('palacio') || p.includes('salón') || p.includes('salon') || p.includes('sobremesa') || p.includes('clásic') || p.includes('clasic') || p.includes('realeza')) {
+    visualTheme = 'amber';
+    title = 'Sobremesa en el Palacio Señorial';
+    tagline = 'Cuarteto de cuerdas clásico, cristalería fina y chimenea de mármol';
+    binauralFreq = 10.0;
+    channels.push({
+      customTitle: 'Cuarteto de Cuerdas en Salón Dorado',
+      soundKey: 'yt_classical_salon',
+      type: 'youtube_video',
+      youtubeVideoId: 'RXhE9oyni_o',
+      youtubeThumbnail: 'https://img.youtube.com/vi/RXhE9oyni_o/hqdefault.jpg',
+      role: 'Música de Salón',
+      volume: 0.65,
+      pan: -0.3,
+      reverbSend: 0.35,
+      delaySend: 0.15,
+      tapeWarmth: 0.25,
+      filterCutoff: 16000,
+    });
+    channels.push({
+      customTitle: 'Cristalería Fina y Banquete de Gala',
+      soundKey: 'yt_banquet_foley',
+      type: 'youtube_video',
+      youtubeVideoId: '_IqVz1fZ2qs',
+      youtubeThumbnail: 'https://img.youtube.com/vi/_IqVz1fZ2qs/hqdefault.jpg',
+      role: 'Foley de Sobremesa',
+      volume: 0.5,
+      pan: 0.25,
+      reverbSend: 0.3,
+      delaySend: 0.1,
+      tapeWarmth: 0.2,
+      filterCutoff: 14000,
+    });
+    channels.push({
+      customTitle: 'Chimenea Monumental de Palacio',
+      soundKey: 'yt_palace_fireplace',
+      type: 'youtube_video',
+      youtubeVideoId: '9JpcEtLPMaA',
+      youtubeThumbnail: 'https://img.youtube.com/vi/9JpcEtLPMaA/hqdefault.jpg',
+      role: 'Calor Ambiental',
+      volume: 0.55,
+      pan: 0.5,
+      reverbSend: 0.25,
+      delaySend: 0.1,
+      tapeWarmth: 0.4,
+      filterCutoff: 15000,
+    });
+  }
+
   // 4. Detect Rain / Thunder
-  if (p.includes('lluvia') || p.includes('rain') || p.includes('trueno') || p.includes('tormenta') || p.includes('agua')) {
+  if ((p.includes('lluvia') || p.includes('rain') || p.includes('trueno') || p.includes('tormenta') || p.includes('agua')) && !p.includes('aristocr') && !p.includes('banquet')) {
     if (!channels.some(c => c.soundKey.includes('rain'))) {
       const video = VERIFIED_VIDEO_CATALOG.rain?.[0] || {
         videoId: 'mPZkdNFkNps',
@@ -355,6 +405,19 @@ export function composeSemanticSoundscape(prompt: string): AISoundscapeResponse 
       binauralFreq = 8.0; // Alpha
       title = 'Metrópolis Neón Cyberpunk';
       tagline = 'Lluvia sintética, sintetizadores analógicos y drones oscuros';
+    } else if (channels.some(c => c.soundKey.includes('classical') || c.soundKey.includes('banquet') || c.soundKey.includes('fireplace'))) {
+      channels.push({
+        customTitle: 'Textura de Vinilo y Salón Acústico',
+        soundKey: 'vinyl',
+        type: 'synthesizer',
+        role: 'Textura Acústica',
+        volume: 0.3,
+        pan: 0.0,
+        reverbSend: 0.25,
+        delaySend: 0.1,
+        filterCutoff: 12000,
+      });
+      binauralFreq = 10.0;
     } else {
       channels.push({
         customTitle: 'Ruido Marrón Cálido de Enfoque',

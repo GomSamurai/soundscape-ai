@@ -4,6 +4,7 @@
  */
 
 const STORAGE_KEY = 'soundscape_gemini_api_key';
+const DEFAULT_PRECONFIGURED_KEY = '';
 
 export interface VerifyKeyResult {
   valid: boolean;
@@ -17,9 +18,11 @@ export interface VerifyKeyResult {
 export const GeminiKeyService = {
   getCustomApiKey(): string {
     try {
-      return localStorage.getItem(STORAGE_KEY) || '';
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored && stored.trim()) return stored.trim();
+      return DEFAULT_PRECONFIGURED_KEY;
     } catch {
-      return '';
+      return DEFAULT_PRECONFIGURED_KEY;
     }
   },
 

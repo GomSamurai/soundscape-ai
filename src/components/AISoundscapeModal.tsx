@@ -4,7 +4,7 @@ import { SOUND_LIBRARY } from '../services/soundLibrary';
 import { GeminiKeyService, VerifyKeyResult } from '../services/geminiKeyService';
 import { composeSemanticSoundscape } from '../services/soundscapeComposer';
 import { VerifiedVideoLibrary } from '../services/verifiedVideoLibrary';
-import { Sparkles, X, Wand2, Check, ArrowRight, Loader2, Youtube, Key, CheckCircle2, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Sparkles, X, Wand2, Check, ArrowRight, Loader2, Youtube, Key, CheckCircle2, AlertCircle, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 
 interface AISoundscapeModalProps {
   isOpen: boolean;
@@ -18,6 +18,7 @@ export const AISoundscapeModal: React.FC<AISoundscapeModalProps> = ({
   onApplyProject,
 }) => {
   const [prompt, setPrompt] = useState('');
+  const [lastGeneratedPrompt, setLastGeneratedPrompt] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedResult, setGeneratedResult] = useState<any | null>(null);
@@ -30,8 +31,14 @@ export const AISoundscapeModal: React.FC<AISoundscapeModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setCustomKey(GeminiKeyService.getCustomApiKey());
-      setKeyTestStatus(null);
+      const activeKey = GeminiKeyService.getCustomApiKey();
+      setCustomKey(activeKey);
+      if (activeKey) {
+        // Auto-verify key on open so user sees green active badge immediately
+        GeminiKeyService.verifyApiKey(activeKey).then((status) => {
+          setKeyTestStatus(status);
+        }).catch(() => {});
+      }
     }
   }, [isOpen]);
 
@@ -59,6 +66,12 @@ export const AISoundscapeModal: React.FC<AISoundscapeModalProps> = ({
   }
 
   const SMART_MOODS: MoodRecipe[] = [
+    {
+      title: 'Sobremesa de Lujo & Banquete',
+      emoji: '🍷',
+      desc: 'Cuarteto clásico, copas de baccarat y chimenea de palacio',
+      prompt: 'Ambiente aristocrático muy de lujo en la sobremesa después de un banquete, con cuarteto de cuerdas clásico, cristalería fina y chimenea de palacio señorial',
+    },
     {
       title: 'Noche de Lluvia & Chimenea',
       emoji: '🌧️',
@@ -146,7 +159,7 @@ export const AISoundscapeModal: React.FC<AISoundscapeModalProps> = ({
                       {
                         parts: [
                           {
-                            text: `You are Soundscape AI. Generate a soundscape project based on: "${textToSubmit.trim()}". Return ONLY a raw JSON object with: { "name": string, "tagline": string, "concept": string, "visualTheme": "cyan"|"amber"|"violet"|"emerald"|"rose", "binauralFreqHz": number, "masterReverb": number, "masterDelay": number, "masterWarmth": number, "category": string, "tags": string[], "channels": [ { "customTitle": string, "soundKey": string, "type": "youtube_video", "youtubeVideoId": string, "role": string, "volume": number, "pan": number, "reverbSend": number, "delaySend": number } ] }`,
+                            text: `You are Soundscape AI. Acoustically decompose this scene description: "${textToSubmit.trim()}". Return ONLY a raw JSON object with: { "name": string, "tagline": string, "concept": string, "visualTheme": "cyan"|"amber"|"violet"|"emerald"|"rose", "binauralFreqHz": number, "masterReverb": number, "masterDelay": number, "masterWarmth": number, "category": string, "tags": string[], "channels": [ { "customTitle": string, "soundKey": string, "type": "youtube_video", "youtubeSearchQuery": string, "role": string, "volume": number, "pan": number, "reverbSend": number, "delaySend": number, "tapeWarmth": number } ] }. Do not default to rain if the user asked for a different mood (like aristocratic salon, medieval tavern, space, etc).`,
                           },
                         ],
                       },
@@ -185,6 +198,7 @@ export const AISoundscapeModal: React.FC<AISoundscapeModalProps> = ({
 
     if (resultData && resultData.channels && resultData.channels.length > 0) {
       setGeneratedResult(resultData);
+      setLastGeneratedPrompt(textToSubmit.trim());
     } else {
       setError('No se pudo orquestar el paisaje sonoro. Por favor, revisa tu conexión o API key.');
     }
@@ -381,12 +395,27 @@ export const AISoundscapeModal: React.FC<AISoundscapeModalProps> = ({
         {/* Content body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-2">
-              ¿Qué entorno o combinación de videos de YouTube quieres crear?
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-semibold text-slate-300">
+                ¿Qué entorno o combinación de videos de YouTube quieres crear?
+              </label>
+              {(prompt || generatedResult) && (
+                <button
+                  onClick={() => {
+                    setPrompt('');
+                    setGeneratedResult(null);
+                    setError(null);
+                  }}
+                  className="text-[11px] text-slate-400 hover:text-rose-400 flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Limpiar y nuevo prompt</span>
+                </button>
+              )}
+            </div>
             <textarea
               rows={3}
-              placeholder="Ej: Quiero una mezcla de lluvia y truenos 4K de YouTube con una chimenea ardiendo, y además música lofi de fondo con volumen sutil..."
+              placeholder="Ej: Quiero una mezcla de cuarteto de cuerdas clásico con cristalería fina y chimenea de palacio, o una taberna medieval con laúd..."
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               className="w-full p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors resize-none"
@@ -491,15 +520,63 @@ export const AISoundscapeModal: React.FC<AISoundscapeModalProps> = ({
 
         {/* Footer actions */}
         <div className="flex items-center justify-between px-6 py-4 bg-slate-950 border-t border-slate-800">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white transition-colors cursor-pointer"
-          >
-            Cancelar
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
+              Cerrar
+            </button>
+            {generatedResult && (
+              <button
+                onClick={() => {
+                  setGeneratedResult(null);
+                  setError(null);
+                }}
+                className="px-3 py-1.5 text-xs text-slate-400 hover:text-rose-400 border border-slate-800 hover:border-rose-500/30 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                title="Descartar vista previa actual y escribir una nueva escena"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Nueva Búsqueda</span>
+              </button>
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
-            {!generatedResult ? (
+            {generatedResult ? (
+              <>
+                <button
+                  onClick={() => handleGenerate()}
+                  disabled={isLoading || !prompt.trim()}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-rose-500/50 disabled:opacity-50 font-semibold text-xs flex items-center gap-2 transition-all cursor-pointer shrink-0"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-rose-400" />
+                      <span>Diseñando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-4 h-4 text-rose-400" />
+                      <span>
+                        {prompt.trim() !== lastGeneratedPrompt.trim()
+                          ? '✨ Orquestar este nuevo prompt'
+                          : '🔄 Regenerar con IA'}
+                      </span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={handleApply}
+                  disabled={isLoading}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs flex items-center gap-2 transition-all shadow-md whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Cargar en Soundscape AI</span>
+                </button>
+              </>
+            ) : (
               <button
                 onClick={() => handleGenerate()}
                 disabled={isLoading || !prompt.trim()}
@@ -516,14 +593,6 @@ export const AISoundscapeModal: React.FC<AISoundscapeModalProps> = ({
                     <span>Orquestar con IA</span>
                   </>
                 )}
-              </button>
-            ) : (
-              <button
-                onClick={handleApply}
-                className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs flex items-center gap-2 transition-all shadow-md whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <Check className="w-4 h-4" />
-                <span>Cargar en Soundscape AI</span>
               </button>
             )}
           </div>

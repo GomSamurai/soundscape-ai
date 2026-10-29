@@ -269,6 +269,26 @@ export const VERIFIED_VIDEO_CATALOG: Record<string, VerifiedVideoEntry[]> = {
       category: 'Musical',
     },
   ],
+  classical: [
+    {
+      videoId: 'RXhE9oyni_o',
+      title: 'Cuarteto de Cuerdas en Salón Clásico para Lectura y Relax',
+      thumbnail: 'https://img.youtube.com/vi/RXhE9oyni_o/hqdefault.jpg',
+      category: 'Musical',
+    },
+    {
+      videoId: '_IqVz1fZ2qs',
+      title: 'Banquete de Gala y Copas de Cristal en Salón Aristocrático',
+      thumbnail: 'https://img.youtube.com/vi/_IqVz1fZ2qs/hqdefault.jpg',
+      category: 'Atmosférico',
+    },
+    {
+      videoId: '9JpcEtLPMaA',
+      title: 'Chimenea Monumental en Palacio y Salón Victoriano',
+      thumbnail: 'https://img.youtube.com/vi/9JpcEtLPMaA/hqdefault.jpg',
+      category: 'Atmosférico',
+    },
+  ],
 };
 
 // Global rotation pointers per theme to guarantee every click changes to a new video
@@ -277,6 +297,7 @@ const rotationIndices: Record<string, number> = {};
 export const VerifiedVideoLibrary = {
   detectCategory(queryOrTitle: string): string {
     const text = (queryOrTitle || '').toLowerCase();
+    if (text.includes('aristocr') || text.includes('banquet') || text.includes('lujo') || text.includes('palacio') || text.includes('salón') || text.includes('salon') || text.includes('sobremesa') || text.includes('clásic') || text.includes('clasic') || text.includes('realeza') || text.includes('cuerdas') || text.includes('string')) return 'classical';
     if (text.includes('ballena') || text.includes('whale') || text.includes('submarino') || text.includes('underwater') || text.includes('bajo el agua') || text.includes('acuático') || text.includes('acuatico')) return 'underwater';
     if (text.includes('hang') || text.includes('handpan') || text.includes('pantalón') || text.includes('drum')) return 'hang_drum';
     if (text.includes('lluvia') || text.includes('rain') || text.includes('tormenta') || text.includes('thunder')) return 'rain';

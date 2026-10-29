@@ -46,6 +46,13 @@ export const YouTubePlayerEmbed: React.FC<YouTubePlayerEmbedProps> = ({
     const host = mountHostRef.current;
     if (!host) return;
 
+    if (!videoId || videoId === 'undefined') {
+      setHasError(true);
+      setErrorCode(100);
+      onErrorChange?.(true, 100);
+      return;
+    }
+
     // Safely clear any existing DOM elements inserted by third-party YouTube API
     // This Container Shield ensures React never diffs or calls removeChild on YouTube's iframe
     host.innerHTML = '';

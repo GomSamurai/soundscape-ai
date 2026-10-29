@@ -135,22 +135,60 @@ app.post('/api/gemini/verify-key', async (req, res) => {
 
 const VERIFIED_FALLBACKS: Record<string, { id: string; title: string }> = {
   rain: { id: 'mPZkdNFkNps', title: 'Rain on Window with Thunder 8K' },
-  fire: { id: 'L_LUpnjgPso', title: 'Fireplace Sounds 4K' },
-  classical: { id: 'RXhE9oyni_o', title: 'Classical Music for Salon & Reading' },
-  banquet: { id: '_IqVz1fZ2qs', title: 'Grand Banquet Dinner & Fine China Ambience' },
-  chatter: { id: 'SMx967gwsIQ', title: 'Sonido de Gente Hablando - Ruido de Fondo Relajante' },
-  restaurant: { id: 'iphXo0rbTaY', title: 'Sonido Ambiente de Restaurante y Murmullo 8H' },
+  fire: { id: 'L_LUpnjgPso', title: 'Fireplace Sounds 4K (3 Hours)' },
+  classical: { id: 'RXhE9oyni_o', title: 'Classical Chamber Music & Salon Strings' },
+  banquet: { id: '6ego1nkJMVw', title: 'Dinner Party Ambience, Glasses & Silverware (10 Hours)' },
+  chatter: { id: 'DqFusZ2TJsM', title: 'Gente Hablando Bar Restaurante Murmullo (2 Horas)' },
+  restaurant: { id: 'iphXo0rbTaY', title: 'Sonido Ambiente de Restaurante y Murmullo (8 Horas)' },
   bar: { id: 'gK1E9gYInKI', title: 'Ambiente de Bar Español y Conversación' },
-  fireplace_palace: { id: '9JpcEtLPMaA', title: 'Luxury Palace Fireplace Ambience' },
-  jazz: { id: 'Dx5qFachd3A', title: 'Cozy Paris Coffee Shop Jazz' },
-  lofi: { id: 'DWcJFNfaw9c', title: 'Lofi Hip Hop Radio Beats' },
-  cyberpunk: { id: 'd00VwBAoiF0', title: 'Blade Runner Cyberpunk Rain' },
-  ocean: { id: 'WHPEKLQID4U', title: 'Calm Ocean Waves Relaxing' },
-  blizzard: { id: '7BrIJrjxVxA', title: 'Blizzard & Snowstorm Ambience' },
-  tibetan: { id: 'By6zerfldXE', title: 'Tibetan Singing Bowls 432Hz' },
-  forest: { id: 'xNN7iTA57jM', title: 'Birds in Forest Spring Ambience' },
-  tavern: { id: '403ksGqDqN4', title: 'Medieval Tavern Warm Hearth & Flute' },
+  fireplace_palace: { id: 'L_LUpnjgPso', title: 'Luxury Palace Fireplace Ambience (3 Hours)' },
+  jazz: { id: 'Dx5qFachd3A', title: 'Cozy Paris Coffee Shop Jazz (24/7)' },
+  lofi: { id: 'DWcJFNfaw9c', title: 'Lofi Hip Hop Radio Beats (24/7)' },
+  cyberpunk: { id: 'd00VwBAoiF0', title: 'Blade Runner Cyberpunk Rain Ambience' },
+  ocean: { id: 'WHPEKLQID4U', title: 'Calm Ocean Waves Relaxing (10 Hours)' },
+  blizzard: { id: '7BrIJrjxVxA', title: 'Blizzard & Snowstorm Ambience (10 Hours)' },
+  tibetan: { id: 'By6zerfldXE', title: 'Tibetan Singing Bowls 432Hz (3 Hours)' },
+  forest: { id: 'xNN7iTA57jM', title: 'Birds in Forest Spring Ambience (3 Hours)' },
+  tavern: { id: '3tFPC9RBYlk', title: 'Medieval Tavern Warm Hearth & Lute (2.5 Hours)' },
+  space: { id: 'DunIRy0PPCs', title: 'Deep Space Ambient Spaceship Drone (10 Hours)' },
+  underwater: { id: 'R885bpfF-R4', title: 'Cantos de Ballenas y Océano Profundo (10 Horas)' },
+  handpan: { id: '7YxcNCtitfA', title: 'Hang Drum & Handpan Meditation (3 Hours)' },
+  vinyl: { id: '8VicNS9H624', title: 'Textura de Vinilo y Crujido Analógico (10 Horas)' },
 };
+
+// Helper: Parse duration string into seconds
+function parseDurationSeconds(durationStr?: string): number {
+  if (!durationStr || durationStr === 'En vivo' || durationStr === 'Live') return 999999;
+  const parts = durationStr.split(':').map(Number);
+  if (parts.some(isNaN)) return 999999;
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return parts[0] || 0;
+}
+
+const BLACKLIST_KEYWORDS = [
+  'trailer',
+  'tráiler',
+  'teaser',
+  'capítulo',
+  'capitulo',
+  'temporada',
+  'serie',
+  'series',
+  'episodio',
+  'review',
+  'reaction',
+  'reacción',
+  'shorts',
+  '#shorts',
+  'tiktok',
+  'noticias',
+  'interview',
+  'entrevista',
+  'parodia',
+  'sketch',
+  'blooper',
+];
 
 // Helper: Live YouTube Search scraper with embed validation & pagination
 interface YouTubeSearchResult {
@@ -213,10 +251,25 @@ async function searchYouTubeLive(query: string, page = 1, maxCandidates = 40): P
         if (v && v.videoId && v.title?.runs?.[0]?.text) {
           const videoId = v.videoId;
           if (seenIds.has(videoId)) continue;
-          seenIds.add(videoId);
 
           const title = v.title.runs[0].text;
+          const lowerTitle = title.toLowerCase();
+
+          // Discard blacklisted series, trailers, reactions, or shorts
+          if (BLACKLIST_KEYWORDS.some((kw) => lowerTitle.includes(kw))) {
+            continue;
+          }
+
           const duration = v.lengthText?.simpleText || 'En vivo';
+
+          // Discard videos shorter than 3 minutes (180s) to guarantee rich ambient recordings with real audio
+          const durationSec = parseDurationSeconds(duration);
+          if (durationSec < 180) {
+            continue;
+          }
+
+          seenIds.add(videoId);
+
           const author = v.ownerText?.runs?.[0]?.text || '';
           const thumbnail =
             v.thumbnail?.thumbnails?.[v.thumbnail.thumbnails.length - 1]?.url ||
@@ -644,17 +697,32 @@ Pistas previas (evitar duplicados innecesarios): ${JSON.stringify(currentTracks)
   // Thematic Fallback Picker
   function pickThematicFallback(text: string): { id: string; title: string } {
     const t = text.toLowerCase();
+    if (t.includes('vinilo') || t.includes('vinyl') || t.includes('crackle') || t.includes('aguja')) {
+      return VERIFIED_FALLBACKS.vinyl;
+    }
+    if (t.includes('banquet') || t.includes('cristal') || t.includes('copas') || t.includes('vajilla') || t.includes('plato') || t.includes('cena')) {
+      return VERIFIED_FALLBACKS.banquet;
+    }
+    if (t.includes('gente') || t.includes('habla') || t.includes('murmullo') || t.includes('conversaci') || t.includes('chatter')) {
+      return VERIFIED_FALLBACKS.chatter;
+    }
     if (t.includes('classical') || t.includes('cuarteto') || t.includes('cuerdas') || t.includes('violin') || t.includes('piano') || t.includes('salon')) {
       return VERIFIED_FALLBACKS.classical;
-    }
-    if (t.includes('banquet') || t.includes('cristal') || t.includes('copas') || t.includes('murmur') || t.includes('comida') || t.includes('plato')) {
-      return VERIFIED_FALLBACKS.banquet;
     }
     if (t.includes('chimenea') || t.includes('fire') || t.includes('hogar') || t.includes('palace fireplace') || t.includes('brasa')) {
       return VERIFIED_FALLBACKS.fireplace_palace;
     }
     if (t.includes('tavern') || t.includes('medieval') || t.includes('lute')) {
       return VERIFIED_FALLBACKS.tavern;
+    }
+    if (t.includes('ballena') || t.includes('whale') || t.includes('submarino') || t.includes('underwater')) {
+      return VERIFIED_FALLBACKS.underwater;
+    }
+    if (t.includes('hang') || t.includes('handpan') || t.includes('drum')) {
+      return VERIFIED_FALLBACKS.handpan;
+    }
+    if (t.includes('espacio') || t.includes('space') || t.includes('drone') || t.includes('nave')) {
+      return VERIFIED_FALLBACKS.space;
     }
     if (t.includes('jazz') || t.includes('cafe') || t.includes('paris')) {
       return VERIFIED_FALLBACKS.jazz;
@@ -696,7 +764,7 @@ Pistas previas (evitar duplicados innecesarios): ${JSON.stringify(currentTracks)
       if (chosenVideo) {
         resolvedChannels.push({
           ...ch,
-          soundKey: 'yt_video',
+          soundKey: `yt_${chosenVideo.videoId}`,
           youtubeVideoId: chosenVideo.videoId,
           youtubeThumbnail: chosenVideo.thumbnail,
           customTitle: ch.customTitle || chosenVideo.title,
@@ -705,7 +773,7 @@ Pistas previas (evitar duplicados innecesarios): ${JSON.stringify(currentTracks)
         const fallbackVid = pickThematicFallback(`${query} ${ch.customTitle || ''}`);
         resolvedChannels.push({
           ...ch,
-          soundKey: 'yt_video',
+          soundKey: `yt_${fallbackVid.id}`,
           youtubeVideoId: fallbackVid.id,
           youtubeThumbnail: `https://img.youtube.com/vi/${fallbackVid.id}/hqdefault.jpg`,
           customTitle: ch.customTitle || fallbackVid.title,

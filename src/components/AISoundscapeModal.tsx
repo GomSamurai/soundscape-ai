@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SoundscapeProject, ChannelTrack } from '../types/soundscape';
+import { SoundscapeProject, ChannelTrack, SoundSourceType } from '../types/soundscape';
 import { SOUND_LIBRARY } from '../services/soundLibrary';
 import { GeminiKeyService, VerifyKeyResult } from '../services/geminiKeyService';
 import { composeSemanticSoundscape } from '../services/soundscapeComposer';
@@ -211,30 +211,37 @@ export const AISoundscapeModal: React.FC<AISoundscapeModalProps> = ({
 
     // Convert AI channels to concrete ChannelTrack objects
     const channels: ChannelTrack[] = generatedResult.channels.map((aiCh: any, index: number) => {
-      const isYt = aiCh.type === 'youtube_video' || Boolean(aiCh.youtubeVideoId) || aiCh.soundKey?.startsWith('yt_');
+      const isYt = aiCh.type === 'youtube_video' || Boolean(aiCh.youtubeVideoId) || (aiCh.soundKey?.startsWith('yt_') && aiCh.type !== 'synthesizer');
       
       // Determine YouTube video ID using verified library
       let videoId = aiCh.youtubeVideoId;
-      if (!videoId && isYt) {
+      if (isYt && (!videoId || videoId === 'undefined')) {
         const verifiedVid = VerifiedVideoLibrary.getNextWorkingVideo(
           undefined,
           aiCh.customTitle,
           aiCh.soundKey
         );
-        videoId = verifiedVid.videoId;
+        videoId = verifiedVid?.videoId || 'mPZkdNFkNps';
       }
 
       // Find matching template in sound library if available
+      const synthTemplates = SOUND_LIBRARY.filter((item) => item.type === 'synthesizer');
       const template =
         SOUND_LIBRARY.find((item) => item.key === aiCh.soundKey) ||
-        (isYt ? SOUND_LIBRARY[0] : SOUND_LIBRARY[index % SOUND_LIBRARY.length]);
+        (isYt ? SOUND_LIBRARY[0] : synthTemplates[index % synthTemplates.length] || SOUND_LIBRARY[0]);
+
+      const finalType: SoundSourceType = isYt
+        ? 'youtube_video'
+        : (aiCh.type === 'synthesizer' ? 'synthesizer' : template.type);
+
+      const finalSynthType = !isYt ? (aiCh.synthType || template.synthType || 'binaural') : undefined;
 
       return {
         id: `ch_ai_${Date.now()}_${index}`,
         name: aiCh.customTitle || (isYt ? `Video YouTube (${videoId})` : template.name),
         soundKey: aiCh.soundKey || (isYt ? `yt_${videoId}` : template.key),
-        type: isYt ? ('youtube_video' as const) : template.type,
-        synthType: isYt ? undefined : template.synthType,
+        type: finalType,
+        synthType: finalSynthType,
         sourceUrl: isYt ? undefined : template.sourceUrl,
         youtubeVideoId: isYt ? videoId : undefined,
         youtubeThumbnail: aiCh.youtubeThumbnail || (isYt ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : undefined),

@@ -164,11 +164,13 @@ export const ChannelStrip: React.FC<ChannelStripProps> = ({
   onOpenReplace,
 }) => {
   const [vuLevel, setVuLevel] = useState<number>(0);
-  const [hasVideoError, setHasVideoError] = useState(Boolean(track.isUnavailable));
+  const [hasVideoError, setHasVideoError] = useState(
+    Boolean(track.isUnavailable || (track.type === 'youtube_video' && !track.youtubeVideoId))
+  );
 
   useEffect(() => {
-    setHasVideoError(Boolean(track.isUnavailable));
-  }, [track.isUnavailable]);
+    setHasVideoError(Boolean(track.isUnavailable || (track.type === 'youtube_video' && !track.youtubeVideoId)));
+  }, [track.isUnavailable, track.type, track.youtubeVideoId]);
 
   const [isAutoFixing, setIsAutoFixing] = useState(false);
   const [isReplaceMenuOpen, setIsReplaceMenuOpen] = useState(false);
@@ -490,9 +492,9 @@ export const ChannelStrip: React.FC<ChannelStripProps> = ({
               title={track.youtubeVideoId || track.name}
             >
               {track.type === 'youtube_video'
-                ? hasVideoError
+                ? hasVideoError || !track.youtubeVideoId
                   ? 'Error YT'
-                  : `YT: ${track.youtubeVideoId?.slice(0, 6)}`
+                  : 'YouTube'
                 : track.type === 'midi_random'
                 ? `MIDI: ${track.midiSoundPreset || 'Rhodes'}`
                 : track.type === 'drone_ambient'

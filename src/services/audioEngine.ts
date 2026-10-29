@@ -949,6 +949,7 @@ class AudioEngine {
         return GenerativeAudioService.createStudioOcean(destination, ctx);
 
       case 'wind_stream':
+      case 'vinyl':
       case 'vinyl_crackle':
       default: {
         // High fidelity filtered atmospheric wind/crackle texture

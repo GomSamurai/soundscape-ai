@@ -1,6 +1,6 @@
 /**
  * Verified YouTube Video Library with Guaranteed Working & Embeddable Videos
- * Provides instant, zero-latency replacement rotation when YouTube videos fail or are blocked.
+ * Provides instant, zero-latency replacement rotation with 100% active, long-duration ambient videos.
  */
 
 export interface VerifiedVideoEntry {
@@ -20,25 +20,25 @@ export const VERIFIED_VIDEO_CATALOG: Record<string, VerifiedVideoEntry[]> = {
     },
     {
       videoId: 'q76bMs-NwRk',
-      title: 'Lluvia Relajante para Dormir y Estudiar',
+      title: '3 Horas de Lluvia Relajante para Dormir y Estudiar',
       thumbnail: 'https://img.youtube.com/vi/q76bMs-NwRk/hqdefault.jpg',
       category: 'Naturaleza',
     },
     {
       videoId: 'yIQd2Ya0Ziw',
-      title: 'Lluvia Suave en Techo de Cristal',
+      title: 'Lluvia Suave y Tormenta de Bosque 8 Horas',
       thumbnail: 'https://img.youtube.com/vi/yIQd2Ya0Ziw/hqdefault.jpg',
       category: 'Naturaleza',
     },
     {
       videoId: 'nDq6TstdEi8',
-      title: 'Tormenta de Lluvia y Truenos Acogedora',
+      title: 'Tormenta de Lluvia y Truenos Acogedora 10 Horas',
       thumbnail: 'https://img.youtube.com/vi/nDq6TstdEi8/hqdefault.jpg',
       category: 'Naturaleza',
     },
     {
       videoId: 'V1RPi2MYptM',
-      title: 'Lluvia Nocturna en el Bosque Profundo',
+      title: 'Lluvia Nocturna Zen con Agua y Paz Sonora',
       thumbnail: 'https://img.youtube.com/vi/V1RPi2MYptM/hqdefault.jpg',
       category: 'Naturaleza',
     },
@@ -46,85 +46,73 @@ export const VERIFIED_VIDEO_CATALOG: Record<string, VerifiedVideoEntry[]> = {
   fire: [
     {
       videoId: 'L_LUpnjgPso',
-      title: 'Fuego de Chimenea Crujiente 4K',
+      title: 'Fuego de Chimenea Crujiente 4K (3 Horas)',
       thumbnail: 'https://img.youtube.com/vi/L_LUpnjgPso/hqdefault.jpg',
       category: 'Atmosférico',
     },
     {
-      videoId: '0fYL_qiDYf0',
-      title: 'Fogata Nocturna Cálida y Relajante',
-      thumbnail: 'https://img.youtube.com/vi/0fYL_qiDYf0/hqdefault.jpg',
-      category: 'Atmosférico',
-    },
-    {
       videoId: 'K0pJRo0XU8s',
-      title: 'Chimenea Tradicional de Leña de Roble',
+      title: 'Chimenea Tradicional de Leña de Roble (10 Horas)',
       thumbnail: 'https://img.youtube.com/vi/K0pJRo0XU8s/hqdefault.jpg',
       category: 'Atmosférico',
     },
     {
-      videoId: 'e9KzL9QkQO8',
-      title: 'Fuego Crepitante en Cabaña de Montaña',
-      thumbnail: 'https://img.youtube.com/vi/e9KzL9QkQO8/hqdefault.jpg',
+      videoId: '9JpcEtLPMaA',
+      title: 'Chimenea Monumental en Palacio y Salón Señorial (1 Hora)',
+      thumbnail: 'https://img.youtube.com/vi/9JpcEtLPMaA/hqdefault.jpg',
       category: 'Atmosférico',
     },
   ],
   ocean: [
     {
       videoId: 'WHPEKLQID4U',
-      title: 'Olas de Mar Suaves en Playa Virgen',
+      title: 'Olas de Mar Suaves en Playa Virgen (10 Horas)',
       thumbnail: 'https://img.youtube.com/vi/WHPEKLQID4U/hqdefault.jpg',
       category: 'Naturaleza',
     },
     {
-      videoId: 'vPhg6sc1Tg4',
-      title: 'Sonido de Océano Pacífico al Atardecer',
-      thumbnail: 'https://img.youtube.com/vi/vPhg6sc1Tg4/hqdefault.jpg',
+      videoId: 'bn9F19Hi1Lk',
+      title: 'Olas de Mar en Estéreo Puro para Dormir (11 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/bn9F19Hi1Lk/hqdefault.jpg',
       category: 'Naturaleza',
     },
     {
-      videoId: 'bn9F19Hi1Lk',
-      title: 'Olas Rompiendo en la Costa Rocosa',
-      thumbnail: 'https://img.youtube.com/vi/bn9F19Hi1Lk/hqdefault.jpg',
+      videoId: 'Nep1qytq9JM',
+      title: 'Olas Suaves Nocturnas en Playa Tropical (4 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/Nep1qytq9JM/hqdefault.jpg',
       category: 'Naturaleza',
     },
   ],
   jazz_cafe: [
     {
       videoId: 'Dx5qFachd3A',
-      title: 'Cafetería de París con Jazz Acogedor',
+      title: 'Cafetería de París con Jazz Acogedor (Stream 24/7)',
       thumbnail: 'https://img.youtube.com/vi/Dx5qFachd3A/hqdefault.jpg',
       category: 'Musical',
     },
     {
       videoId: 'fEvM-OUbaKs',
-      title: 'Ambiente de Café con Piano Suave',
+      title: 'Coffee Jazz Lounge Chill Out (Stream 24/7)',
       thumbnail: 'https://img.youtube.com/vi/fEvM-OUbaKs/hqdefault.jpg',
       category: 'Musical',
     },
     {
-      videoId: 'NJuSStWVODg',
-      title: 'Café Jazz Nocturno con Lluvia en Ventana',
-      thumbnail: 'https://img.youtube.com/vi/NJuSStWVODg/hqdefault.jpg',
+      videoId: 'h2zkV-l_TbY',
+      title: 'Ambiente de Cafetería y Jazz Suave con Lluvia (10 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/h2zkV-l_TbY/hqdefault.jpg',
       category: 'Musical',
     },
   ],
   lofi: [
     {
       videoId: 'DWcJFNfaw9c',
-      title: 'Lofi Hip Hop Radio Beats to Relax / Study',
+      title: 'Lofi Hip Hop Radio Beats to Sleep & Chill (Lofi Girl 24/7)',
       thumbnail: 'https://img.youtube.com/vi/DWcJFNfaw9c/hqdefault.jpg',
       category: 'Musical',
     },
     {
-      videoId: 'jfKfPfyJRdk',
-      title: 'Lofi Girl Relaxing Beats Study Session',
-      thumbnail: 'https://img.youtube.com/vi/jfKfPfyJRdk/hqdefault.jpg',
-      category: 'Musical',
-    },
-    {
       videoId: '7NOSDKb0HlU',
-      title: 'Chillhop Beats & Lofi Instrumental',
+      title: 'Chillhop Beats to Study & Relax (Chillhop 24/7)',
       thumbnail: 'https://img.youtube.com/vi/7NOSDKb0HlU/hqdefault.jpg',
       category: 'Musical',
     },
@@ -132,19 +120,19 @@ export const VERIFIED_VIDEO_CATALOG: Record<string, VerifiedVideoEntry[]> = {
   forest: [
     {
       videoId: 'xNN7iTA57jM',
-      title: 'Pájaros Cantando en Bosque Verde Primaveral',
+      title: 'Pájaros Cantando en Bosque Verde Primaveral (3 Horas)',
       thumbnail: 'https://img.youtube.com/vi/xNN7iTA57jM/hqdefault.jpg',
       category: 'Naturaleza',
     },
     {
       videoId: '8myYyMg1fFE',
-      title: 'Arroyo Cristalino y Naturaleza de Bosque',
+      title: 'Lluvia y Sonidos de Fauna en Bosque Húmedo',
       thumbnail: 'https://img.youtube.com/vi/8myYyMg1fFE/hqdefault.jpg',
       category: 'Naturaleza',
     },
     {
       videoId: 'eKFTSSKCzWA',
-      title: 'Bosque de Bambú Zen con Viento Suave',
+      title: 'Cascada Natural y Canto de Aves en el Bosque',
       thumbnail: 'https://img.youtube.com/vi/eKFTSSKCzWA/hqdefault.jpg',
       category: 'Naturaleza',
     },
@@ -152,39 +140,21 @@ export const VERIFIED_VIDEO_CATALOG: Record<string, VerifiedVideoEntry[]> = {
   blizzard: [
     {
       videoId: '7BrIJrjxVxA',
-      title: 'Tormenta de Nieve y Ventisca Invernal 4K',
+      title: 'Ventisca Ártica y Viento Aullando en el Bosque (10 Horas)',
       thumbnail: 'https://img.youtube.com/vi/7BrIJrjxVxA/hqdefault.jpg',
-      category: 'Naturaleza',
-    },
-    {
-      videoId: 'M0u1zX9h-74',
-      title: 'Ventisca Ártica Furiosa en Refugio Helado',
-      thumbnail: 'https://img.youtube.com/vi/M0u1zX9h-74/hqdefault.jpg',
-      category: 'Naturaleza',
-    },
-    {
-      videoId: 's88r_z7ourE',
-      title: 'Viento Helado Aullando en Montaña Nevada',
-      thumbnail: 'https://img.youtube.com/vi/s88r_z7ourE/hqdefault.jpg',
       category: 'Naturaleza',
     },
   ],
   tibetan: [
     {
       videoId: 'By6zerfldXE',
-      title: 'Cuencos Tibetanos Cantores a 432 Hz',
+      title: 'Cuencos Tibetanos y Baño de Sonido Relajante (3 Horas)',
       thumbnail: 'https://img.youtube.com/vi/By6zerfldXE/hqdefault.jpg',
       category: 'Binaural & Drones',
     },
     {
-      videoId: 'P_PszbF_69E',
-      title: 'Campanas Tibetanas y Cuencos de Cuarzo',
-      thumbnail: 'https://img.youtube.com/vi/P_PszbF_69E/hqdefault.jpg',
-      category: 'Binaural & Drones',
-    },
-    {
       videoId: 'FjHGZj2IjBk',
-      title: 'Frecuencia de Sanación Cuencos Tibetanos 528Hz',
+      title: 'Meditación Zen y Paz Acústica Profunda',
       thumbnail: 'https://img.youtube.com/vi/FjHGZj2IjBk/hqdefault.jpg',
       category: 'Binaural & Drones',
     },
@@ -192,100 +162,156 @@ export const VERIFIED_VIDEO_CATALOG: Record<string, VerifiedVideoEntry[]> = {
   cyberpunk: [
     {
       videoId: 'd00VwBAoiF0',
-      title: 'Blade Runner Cyberpunk Lluvia Neón',
+      title: 'Blade Runner Cyberpunk Lluvia Neón y Sintetizadores',
       thumbnail: 'https://img.youtube.com/vi/d00VwBAoiF0/hqdefault.jpg',
       category: 'Atmosférico',
     },
     {
       videoId: '3sL0omwElxw',
-      title: 'Ciudad Cyberpunk Futurista 2077 Lluvia Nocturna',
+      title: 'Lluvia Sci-Fi y Fuego de Chimenea Futurista (3 Horas)',
       thumbnail: 'https://img.youtube.com/vi/3sL0omwElxw/hqdefault.jpg',
       category: 'Atmosférico',
-    },
-    {
-      videoId: 's49CT4qW-4k',
-      title: 'Tokyo Sci-Fi Ambient Synthwave Neón',
-      thumbnail: 'https://img.youtube.com/vi/s49CT4qW-4k/hqdefault.jpg',
-      category: 'Atmosférico',
-    },
-  ],
-  space: [
-    {
-      videoId: '1ZYbU8JGB4A',
-      title: 'Espacio Profundo Drone Gravitacional 4K',
-      thumbnail: 'https://img.youtube.com/vi/1ZYbU8JGB4A/hqdefault.jpg',
-      category: 'Binaural & Drones',
-    },
-    {
-      videoId: 'MCkH_8l5zN0',
-      title: 'Nebulosa Cósmica Estelar y Sonidos Interestelares',
-      thumbnail: 'https://img.youtube.com/vi/MCkH_8l5zN0/hqdefault.jpg',
-      category: 'Binaural & Drones',
-    },
-    {
-      videoId: 'L1UeW33lGHY',
-      title: 'Vuelo a Través de las Estrellas Ambient Drone',
-      thumbnail: 'https://img.youtube.com/vi/L1UeW33lGHY/hqdefault.jpg',
-      category: 'Binaural & Drones',
-    },
-  ],
-  underwater: [
-    {
-      videoId: '6fT9z0jLhO8',
-      title: 'Cantos de Ballenas y Océano Submarino Profundo 4K',
-      thumbnail: 'https://img.youtube.com/vi/6fT9z0jLhO8/hqdefault.jpg',
-      category: 'Naturaleza',
-    },
-    {
-      videoId: 'zC3vYkYfEyo',
-      title: 'Mundo Submarino Relajante con Peces y Arrecife',
-      thumbnail: 'https://img.youtube.com/vi/zC3vYkYfEyo/hqdefault.jpg',
-      category: 'Naturaleza',
-    },
-    {
-      videoId: 'gR3W-r-fKkI',
-      title: 'Sonidos de Ballenas Azules y Profundidades Marinas',
-      thumbnail: 'https://img.youtube.com/vi/gR3W-r-fKkI/hqdefault.jpg',
-      category: 'Naturaleza',
-    },
-  ],
-  hang_drum: [
-    {
-      videoId: 'tWv8l7wH1jQ',
-      title: 'Hang Drum & Handpan Meditación Hipnótica 432Hz',
-      thumbnail: 'https://img.youtube.com/vi/tWv8l7wH1jQ/hqdefault.jpg',
-      category: 'Musical',
-    },
-    {
-      videoId: 'd3w9b0XgWqQ',
-      title: 'Handpan Místico Relajación Profunda',
-      thumbnail: 'https://img.youtube.com/vi/d3w9b0XgWqQ/hqdefault.jpg',
-      category: 'Musical',
-    },
-    {
-      videoId: 'P6rB41i4nNw',
-      title: 'Hang Drum Acústico en el Bosque Zen',
-      thumbnail: 'https://img.youtube.com/vi/P6rB41i4nNw/hqdefault.jpg',
-      category: 'Musical',
     },
   ],
   classical: [
     {
       videoId: 'RXhE9oyni_o',
-      title: 'Cuarteto de Cuerdas en Salón Clásico para Lectura y Relax',
+      title: 'Cuarteto de Cuerdas Clásico Completo en Salón Dorado',
       thumbnail: 'https://img.youtube.com/vi/RXhE9oyni_o/hqdefault.jpg',
       category: 'Musical',
     },
+  ],
+  banquet: [
     {
-      videoId: '_IqVz1fZ2qs',
-      title: 'Banquete de Gala y Copas de Cristal en Salón Aristocrático',
-      thumbnail: 'https://img.youtube.com/vi/_IqVz1fZ2qs/hqdefault.jpg',
+      videoId: '6ego1nkJMVw',
+      title: 'Banquete de Gala · Tintineo de Copas, Cubiertos y Murmullo Cortés (10 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/6ego1nkJMVw/hqdefault.jpg',
       category: 'Atmosférico',
     },
     {
-      videoId: '9JpcEtLPMaA',
-      title: 'Chimenea Monumental en Palacio y Salón Victoriano',
-      thumbnail: 'https://img.youtube.com/vi/9JpcEtLPMaA/hqdefault.jpg',
+      videoId: 'qm-TvNt9vDs',
+      title: 'Sobremesa Elegante · Cristalería Fina y Conversación Suave (1 Hora)',
+      thumbnail: 'https://img.youtube.com/vi/qm-TvNt9vDs/hqdefault.jpg',
+      category: 'Atmosférico',
+    },
+    {
+      videoId: 'iphXo0rbTaY',
+      title: 'Sonido Ambiente de Restaurante Señorial y Banquete (8 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/iphXo0rbTaY/hqdefault.jpg',
+      category: 'Atmosférico',
+    },
+  ],
+  chatter: [
+    {
+      videoId: 'DqFusZ2TJsM',
+      title: 'Gente Hablando en Cafetería y Restaurante · Murmullo Relajante (2 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/DqFusZ2TJsM/hqdefault.jpg',
+      category: 'Atmosférico',
+    },
+    {
+      videoId: 'SMx967gwsIQ',
+      title: 'Sonido de Gente Hablando de Fondo para Acompañamiento y Estudio',
+      thumbnail: 'https://img.youtube.com/vi/SMx967gwsIQ/hqdefault.jpg',
+      category: 'Atmosférico',
+    },
+    {
+      videoId: 'gK1E9gYInKI',
+      title: 'Ambiente de Bar Español Lleno, Murmullo y Tapas',
+      thumbnail: 'https://img.youtube.com/vi/gK1E9gYInKI/hqdefault.jpg',
+      category: 'Atmosférico',
+    },
+  ],
+  tavern: [
+    {
+      videoId: '3tFPC9RBYlk',
+      title: 'Taberna Medieval · Fuego de Chimenea, Risas y Música de Laúd (2.5 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/3tFPC9RBYlk/hqdefault.jpg',
+      category: 'Atmosférico',
+    },
+    {
+      videoId: 'SUbvpyEYaxs',
+      title: 'Hogar de Taberna Medieval con Laúd Cálido (1 Hora)',
+      thumbnail: 'https://img.youtube.com/vi/SUbvpyEYaxs/hqdefault.jpg',
+      category: 'Atmosférico',
+    },
+    {
+      videoId: 'rv3Nl-Od9YU',
+      title: 'Sonidos de Taberna Medieval con Chimenea Crujiente (1 Hora)',
+      thumbnail: 'https://img.youtube.com/vi/rv3Nl-Od9YU/hqdefault.jpg',
+      category: 'Atmosférico',
+    },
+  ],
+  underwater: [
+    {
+      videoId: 'R885bpfF-R4',
+      title: 'Cantos de Ballenas y Océano Profundo 4K (10 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/R885bpfF-R4/hqdefault.jpg',
+      category: 'Naturaleza',
+    },
+    {
+      videoId: 'YdUwmNp-7oI',
+      title: 'Canto de Ballenas en el Arrecife · Ondas Submarinas (6 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/YdUwmNp-7oI/hqdefault.jpg',
+      category: 'Naturaleza',
+    },
+    {
+      videoId: '8prg0qdjTgU',
+      title: 'Inmersión Subacuática y Ecos Cetáceos (10 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/8prg0qdjTgU/hqdefault.jpg',
+      category: 'Naturaleza',
+    },
+  ],
+  space: [
+    {
+      videoId: 'DunIRy0PPCs',
+      title: 'Zumbido de Nave Espacial y Vacío Cósmico (10 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/DunIRy0PPCs/hqdefault.jpg',
+      category: 'Binaural & Drones',
+    },
+    {
+      videoId: 'BtfzACa0kIg',
+      title: 'Sonidos del Espacio Profundo y Motores de Nave (10 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/BtfzACa0kIg/hqdefault.jpg',
+      category: 'Binaural & Drones',
+    },
+    {
+      videoId: 'TPWYQ94Ief4',
+      title: 'Órbita Planetaria · Resonancia Subgrave Espacial (10 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/TPWYQ94Ief4/hqdefault.jpg',
+      category: 'Binaural & Drones',
+    },
+  ],
+  hang_drum: [
+    {
+      videoId: '7YxcNCtitfA',
+      title: 'Hang Drum y Handpan Meditación Hipnótica al Atardecer (3 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/7YxcNCtitfA/hqdefault.jpg',
+      category: 'Musical',
+    },
+    {
+      videoId: 'FnVbcIalin8',
+      title: 'Música de Handpan Relajante y Ondas Armónicas (8 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/FnVbcIalin8/hqdefault.jpg',
+      category: 'Musical',
+    },
+    {
+      videoId: 'EUpmd5M0qVo',
+      title: 'Handpan Acústico Meditativo y Flujo Zen (3.5 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/EUpmd5M0qVo/hqdefault.jpg',
+      category: 'Musical',
+    },
+  ],
+  vinyl: [
+    {
+      videoId: '8VicNS9H624',
+      title: 'Textura de Vinilo y Crujido Analógico Cálido (10 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/8VicNS9H624/hqdefault.jpg',
+      category: 'Atmosférico',
+    },
+    {
+      videoId: 'm5Mz9Tqs9CE',
+      title: 'Aguja sobre Disco de Vinilo · Ruido Blanco Vintage (10 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/m5Mz9Tqs9CE/hqdefault.jpg',
       category: 'Atmosférico',
     },
   ],
@@ -297,19 +323,23 @@ const rotationIndices: Record<string, number> = {};
 export const VerifiedVideoLibrary = {
   detectCategory(queryOrTitle: string): string {
     const text = (queryOrTitle || '').toLowerCase();
-    if (text.includes('aristocr') || text.includes('banquet') || text.includes('lujo') || text.includes('palacio') || text.includes('salón') || text.includes('salon') || text.includes('sobremesa') || text.includes('clásic') || text.includes('clasic') || text.includes('realeza') || text.includes('cuerdas') || text.includes('string')) return 'classical';
+    if (text.includes('vinilo') || text.includes('vinyl') || text.includes('aguja') || text.includes('disco') || text.includes('vintage') || text.includes('crackle')) return 'vinyl';
+    if (text.includes('banquet') || text.includes('cristal') || text.includes('copas') || text.includes('vajilla') || text.includes('plato') || text.includes('cena')) return 'banquet';
+    if (text.includes('gente') || text.includes('habla') || text.includes('murmullo') || text.includes('conversaci') || text.includes('chatter') || text.includes('compañía') || text.includes('personas')) return 'chatter';
+    if (text.includes('taberna') || text.includes('tavern') || text.includes('medieval') || text.includes('posada') || text.includes('laúd') || text.includes('lute')) return 'tavern';
     if (text.includes('ballena') || text.includes('whale') || text.includes('submarino') || text.includes('underwater') || text.includes('bajo el agua') || text.includes('acuático') || text.includes('acuatico')) return 'underwater';
     if (text.includes('hang') || text.includes('handpan') || text.includes('pantalón') || text.includes('drum')) return 'hang_drum';
+    if (text.includes('aristocr') || text.includes('lujo') || text.includes('palacio') || text.includes('salón') || text.includes('salon') || text.includes('sobremesa') || text.includes('clásic') || text.includes('clasic') || text.includes('realeza') || text.includes('cuerdas') || text.includes('string')) return 'classical';
     if (text.includes('lluvia') || text.includes('rain') || text.includes('tormenta') || text.includes('thunder')) return 'rain';
-    if (text.includes('fuego') || text.includes('fire') || text.includes('chimenea') || text.includes('fogata')) return 'fire';
-    if (text.includes('mar') || text.includes('ocean') || text.includes('ola') || text.includes('playa')) return 'ocean';
+    if (text.includes('fuego') || text.includes('fire') || text.includes('chimenea') || text.includes('fogata') || text.includes('leña')) return 'fire';
+    if (text.includes('mar') || text.includes('ocean') || text.includes('ola') || text.includes('playa') || text.includes('costa')) return 'ocean';
     if (text.includes('jazz') || text.includes('café') || text.includes('cafe') || text.includes('paris')) return 'jazz_cafe';
     if (text.includes('lofi') || text.includes('lo-fi') || text.includes('beats') || text.includes('chillhop')) return 'lofi';
     if (text.includes('bosque') || text.includes('forest') || text.includes('pájaro') || text.includes('bird')) return 'forest';
     if (text.includes('nieve') || text.includes('snow') || text.includes('ventisca') || text.includes('blizzard')) return 'blizzard';
-    if (text.includes('tibetan') || text.includes('cuenco') || text.includes('bowl') || text.includes('zen')) return 'tibetan';
-    if (text.includes('cyber') || text.includes('blade') || text.includes('runner') || text.includes('neon')) return 'cyberpunk';
-    if (text.includes('espacio') || text.includes('space') || text.includes('cosmos') || text.includes('drone')) return 'space';
+    if (text.includes('tibetan') || text.includes('cuenco') || text.includes('bowl') || text.includes('zen') || text.includes('medita')) return 'tibetan';
+    if (text.includes('cyber') || text.includes('blade') || text.includes('runner') || text.includes('neon') || text.includes('futuro')) return 'cyberpunk';
+    if (text.includes('espacio') || text.includes('space') || text.includes('cosmos') || text.includes('drone') || text.includes('nave')) return 'space';
     return 'rain';
   },
 

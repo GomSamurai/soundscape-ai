@@ -47,9 +47,9 @@ export function composeSemanticSoundscape(prompt: string): AISoundscapeResponse 
   if (p.includes('submarino') || p.includes('ballena') || p.includes('underwater') || p.includes('bajo el agua') || p.includes('marino') || p.includes('acuático') || p.includes('acuatico')) {
     visualTheme = 'cyan';
     const video = VERIFIED_VIDEO_CATALOG.underwater?.[0] || {
-      videoId: '6fT9z0jLhO8',
-      title: 'Cantos de Ballenas y Océano Submarino 4K',
-      thumbnail: 'https://img.youtube.com/vi/6fT9z0jLhO8/hqdefault.jpg',
+      videoId: 'R885bpfF-R4',
+      title: 'Cantos de Ballenas y Océano Profundo 4K (10 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/R885bpfF-R4/hqdefault.jpg',
     };
     channels.push({
       customTitle: 'Cantos de Ballenas & Fondo Submarino',
@@ -94,9 +94,9 @@ export function composeSemanticSoundscape(prompt: string): AISoundscapeResponse 
   // 3. Detect Hang Drum / Handpan
   if (p.includes('hang') || p.includes('handpan') || p.includes('drum') || p.includes('percusión') || p.includes('percusion')) {
     const video = VERIFIED_VIDEO_CATALOG.hang_drum?.[0] || {
-      videoId: 'tWv8l7wH1jQ',
-      title: 'Hang Drum & Handpan Meditación Hipnótica',
-      thumbnail: 'https://img.youtube.com/vi/tWv8l7wH1jQ/hqdefault.jpg',
+      videoId: '7YxcNCtitfA',
+      title: 'Hang Drum & Handpan Meditación Hipnótica (3 Horas)',
+      thumbnail: 'https://img.youtube.com/vi/7YxcNCtitfA/hqdefault.jpg',
     };
     channels.push({
       customTitle: 'Hang Drum Melódico Acústico',
@@ -138,8 +138,8 @@ export function composeSemanticSoundscape(prompt: string): AISoundscapeResponse 
       customTitle: 'Cristalería Fina y Banquete de Gala',
       soundKey: 'yt_banquet_foley',
       type: 'youtube_video',
-      youtubeVideoId: '_IqVz1fZ2qs',
-      youtubeThumbnail: 'https://img.youtube.com/vi/_IqVz1fZ2qs/hqdefault.jpg',
+      youtubeVideoId: '6ego1nkJMVw',
+      youtubeThumbnail: 'https://img.youtube.com/vi/6ego1nkJMVw/hqdefault.jpg',
       role: 'Foley de Sobremesa',
       volume: 0.5,
       pan: 0.25,
@@ -408,12 +408,14 @@ export function composeSemanticSoundscape(prompt: string): AISoundscapeResponse 
     } else if (channels.some(c => c.soundKey.includes('classical') || c.soundKey.includes('banquet') || c.soundKey.includes('fireplace'))) {
       channels.push({
         customTitle: 'Textura de Vinilo y Salón Acústico',
-        soundKey: 'vinyl',
-        type: 'synthesizer',
+        soundKey: 'yt_vinyl_crackle',
+        type: 'youtube_video',
+        youtubeVideoId: '8VicNS9H624',
+        youtubeThumbnail: 'https://img.youtube.com/vi/8VicNS9H624/hqdefault.jpg',
         role: 'Textura Acústica',
-        volume: 0.3,
+        volume: 0.35,
         pan: 0.0,
-        reverbSend: 0.25,
+        reverbSend: 0.2,
         delaySend: 0.1,
         filterCutoff: 12000,
       });

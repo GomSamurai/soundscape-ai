@@ -162,6 +162,11 @@ export const ChannelStrip: React.FC<ChannelStripProps> = ({
 }) => {
   const [vuLevel, setVuLevel] = useState<number>(0);
   const [hasVideoError, setHasVideoError] = useState(Boolean(track.isUnavailable));
+
+  useEffect(() => {
+    setHasVideoError(Boolean(track.isUnavailable));
+  }, [track.isUnavailable]);
+
   const [isAutoFixing, setIsAutoFixing] = useState(false);
   const [isReplaceMenuOpen, setIsReplaceMenuOpen] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(true);
@@ -879,23 +884,6 @@ export const ChannelStrip: React.FC<ChannelStripProps> = ({
           />
         </div>
       </div>
-
-      {/* Persistent Offscreen YouTube Audio Player */}
-      {track.type === 'youtube_video' && track.youtubeVideoId && (
-        <YouTubePlayerEmbed
-          trackId={track.id}
-          videoId={track.youtubeVideoId}
-          volume={track.volume * (assignedBus ? assignedBus.volume : 1.0)}
-          masterVolume={masterVolume}
-          isPlaying={isPlaying}
-          muted={isEffectivelyMuted}
-          isSoloBlocked={isEffectivelySoloBlocked}
-          visible={false}
-          onAutoReplace={handleAutoReplace}
-          onOpenReplace={() => onOpenReplace?.(track.id, track.name)}
-          onErrorChange={(err) => setHasVideoError(err)}
-        />
-      )}
     </div>
   );
 };

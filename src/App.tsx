@@ -19,6 +19,8 @@ import { BinauralTunerModal } from './components/BinauralTunerModal';
 import { GeminiSettingsModal } from './components/GeminiSettingsModal';
 import { SleepTimerModal, TimerConfig } from './components/SleepTimerModal';
 import { ZenModeView } from './components/ZenModeView';
+import { YouTubePlayerEmbed } from './components/YouTubePlayerEmbed';
+import { VerifiedVideoLibrary } from './services/verifiedVideoLibrary';
 import { GeminiKeyService } from './services/geminiKeyService';
 import {
   Plus,
@@ -834,15 +836,17 @@ export default function App() {
         )}
 
         {/* Master Real-time Living Acoustic Visualizer Ribbon */}
-        <section aria-label="Visualizador Acústico Maestro">
-          <MasterVisualizer
-            themeColor={activeColor}
-            isPlaying={isPlaying}
-            masterVolume={activeProject.masterVolume}
-            masterFilter={activeProject.masterFilter}
-            tracks={activeProject.channels}
-          />
-        </section>
+        {currentView !== 'zen' && (
+          <section aria-label="Visualizador Acústico Maestro">
+            <MasterVisualizer
+              themeColor={activeColor}
+              isPlaying={isPlaying}
+              masterVolume={activeProject.masterVolume}
+              masterFilter={activeProject.masterFilter}
+              tracks={activeProject.channels}
+            />
+          </section>
+        )}
 
         {/* View 1: Multi-Video Screen Grid (When user wants to watch all YouTube videos together) */}
         {currentView === 'multi_video' && (
@@ -1197,6 +1201,56 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Global Persistent YouTube Audio Layer (Mounted in mixer and zen so YouTube playback never stops) */}
+      <div className="fixed -left-[9999px] -top-[9999px] w-1 h-1 pointer-events-none opacity-0 overflow-hidden" aria-hidden="true">
+        {currentView !== 'multi_video' &&
+          activeProject.channels
+            .filter((t) => t.type === 'youtube_video' && t.youtubeVideoId)
+            .map((track) => {
+            const assignedBus = activeProject.buses?.find((b) => b.id === track.busId);
+            const isBusMuted = assignedBus?.muted || false;
+            const hasAnyBusSolo = activeProject.buses?.some((b) => b.solo) || false;
+            const isBusSoloBlocked = hasAnyBusSolo && !assignedBus?.solo && !track.solo;
+            const isTrackSoloBlocked = hasAnySolo && !track.solo;
+            const isEffectivelyMuted = track.muted || isBusMuted;
+            const isEffectivelySoloBlocked = isTrackSoloBlocked || isBusSoloBlocked;
+            const busVolumeMult = assignedBus ? assignedBus.volume : 1.0;
+
+            return (
+              <YouTubePlayerEmbed
+                key={track.id}
+                trackId={track.id}
+                videoId={track.youtubeVideoId!}
+                volume={track.volume * busVolumeMult}
+                masterVolume={activeProject.masterVolume}
+                isPlaying={isPlaying}
+                muted={isEffectivelyMuted}
+                isSoloBlocked={isEffectivelySoloBlocked}
+                visible={false}
+                onAutoReplace={() => {
+                  const cleanName = track.name.replace(/\(.*?\)/g, '').trim();
+                  const fallback = VerifiedVideoLibrary.getNextWorkingVideo(
+                    track.youtubeVideoId,
+                    cleanName,
+                    track.category
+                  );
+                  handleUpdateChannel(track.id, {
+                    youtubeVideoId: fallback.videoId,
+                    youtubeThumbnail: fallback.thumbnail,
+                    name: fallback.title.slice(0, 26),
+                    isUnavailable: false,
+                  });
+                }}
+                onErrorChange={(err) => {
+                  if (err && !track.isUnavailable) {
+                    handleUpdateChannel(track.id, { isUnavailable: true });
+                  }
+                }}
+              />
+            );
+          })}
+      </div>
 
       {/* Hidden Audio File Input for Local Import */}
       <input

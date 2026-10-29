@@ -1,4 +1,38 @@
-import { ColorPalette, VisualizerPreset, VisualizerSettings } from '../types/visualizer';
+import { ColorPalette, VisualizerPreset, VisualizerSettings, VisualizerMode } from '../types/visualizer';
+import {
+  BarChart2,
+  Activity,
+  Waves,
+  Layers,
+  Disc3,
+  Radio,
+  Sparkles,
+  Crosshair,
+  Grid,
+  Sun,
+} from 'lucide-react';
+
+export interface VisualizerModeConfig {
+  mode: VisualizerMode;
+  label: string;
+  shortLabel: string;
+  icon: any;
+  desc: string;
+  badge: string;
+}
+
+export const VISUALIZER_MODES_CONFIG: VisualizerModeConfig[] = [
+  { mode: 'spectrum', label: 'Espectro', shortLabel: 'RTA', icon: BarChart2, desc: 'RTA 32/64/128 Bandas con Picos de Estudio', badge: 'Estudio' },
+  { mode: 'curve', label: 'Curva FFT', shortLabel: 'Spline', icon: Activity, desc: 'Spline analógico continuo con glow reactivo', badge: 'Spline' },
+  { mode: 'oscilloscope', label: 'Onda PCM', shortLabel: 'Onda', icon: Waves, desc: 'Osciloscopio analógico en tiempo real', badge: 'Fase' },
+  { mode: 'waterfall', label: 'Cascada', shortLabel: 'Cascada', icon: Layers, desc: 'Sonograma termográfico 3D histórico', badge: '3D' },
+  { mode: 'radial', label: 'Radial', shortLabel: 'Radial', icon: Disc3, desc: 'Mandala polar 360° circular reactivo', badge: 'Polar' },
+  { mode: 'tunnel', label: 'Túnel 3D', shortLabel: 'Túnel', icon: Radio, desc: 'Hiper-túnel cuántico reactivo a subgraves', badge: 'Warp' },
+  { mode: 'particles', label: 'Partículas', shortLabel: 'Partíc.', icon: Sparkles, desc: 'Nebulosa gravitatoria con enjambre cinético', badge: 'Cosmos' },
+  { mode: 'lissajous', label: 'Fase Lissajous', shortLabel: 'Fase', icon: Crosshair, desc: 'Goniometro de fase y correlación estéreo', badge: 'Estéreo' },
+  { mode: 'terrain', label: 'Malla 3D', shortLabel: 'Malla', icon: Grid, desc: 'Topografía wireframe retro-futurista', badge: 'Cyber' },
+  { mode: 'orb', label: 'Púlsar Plasma', shortLabel: 'Púlsar', icon: Sun, desc: 'Orbe estelar biomecánico con corona solar', badge: 'Plasma' },
+];
 
 export const COLOR_PALETTES: ColorPalette[] = [
   {

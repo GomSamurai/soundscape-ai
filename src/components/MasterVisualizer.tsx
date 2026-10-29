@@ -20,6 +20,7 @@ import {
   persistVisualizerSettings,
   loadUserVisualizerPresets,
   saveUserVisualizerPresets,
+  VISUALIZER_MODES_CONFIG,
 } from '../constants/visualizerPresets';
 import {
   BarChart2,
@@ -39,6 +40,7 @@ import {
   Sparkles,
   Radio,
   Eye,
+  EyeOff,
   Crosshair,
   Flame,
   Check,
@@ -56,6 +58,8 @@ interface MasterVisualizerProps {
   masterVolume?: number;
   masterFilter?: number;
   tracks?: ChannelTrack[];
+  isZenMode?: boolean;
+  onExitZen?: () => void;
 }
 
 interface Particle {
@@ -79,6 +83,8 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
   masterVolume = 0.85,
   masterFilter = 18000,
   tracks = [],
+  isZenMode = false,
+  onExitZen,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -86,12 +92,25 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
   // Settings State (persisted to LocalStorage)
   const [settings, setSettings] = useState<VisualizerSettings>(() => loadStoredSettings());
 
-  // UI Panels State
+  // UI Panels & HUD State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isImmersiveMode, setIsImmersiveMode] = useState(false);
+  const [isDynamicsOpen, setIsDynamicsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'modes' | 'colors' | 'dynamics' | 'presets'>('modes');
   const [userPresets, setUserPresets] = useState<VisualizerPreset[]>(() => loadUserVisualizerPresets());
   const [newPresetName, setNewPresetName] = useState('');
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+
+  // Listen to external settings updates (e.g. from ZenMode or other components)
+  useEffect(() => {
+    const handleSync = (e: any) => {
+      if (e.detail) {
+        setSettings(e.detail);
+      }
+    };
+    window.addEventListener('visualizer_settings_changed', handleSync);
+    return () => window.removeEventListener('visualizer_settings_changed', handleSync);
+  }, []);
 
   // Peak Meter
   const [peakDb, setPeakDb] = useState<number>(-60);
@@ -136,9 +155,19 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
     setSettings((prev) => {
       const next = { ...prev, ...updates };
       persistVisualizerSettings(next);
+      window.dispatchEvent(new CustomEvent('visualizer_settings_changed', { detail: next }));
       return next;
     });
   }, []);
+
+  // Quick Cycle Color Palette
+  const handleCyclePalette = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const currentIndex = COLOR_PALETTES.findIndex((p) => p.id === settings.paletteId);
+    const nextIndex = (currentIndex + 1) % COLOR_PALETTES.length;
+    const next = COLOR_PALETTES[nextIndex];
+    updateSettings({ paletteId: next.id });
+  };
 
   // Save Preset handler
   const handleSaveCurrentPreset = (e: React.FormEvent) => {
@@ -210,16 +239,17 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
 
   // Height class mapping
   const heightClass = useMemo(() => {
+    if (isZenMode) return 'absolute inset-0 w-full h-full';
     switch (settings.heightMode) {
       case 'compact':
-        return 'h-24 sm:h-28';
+        return 'h-28 sm:h-32';
       case 'tall':
-        return 'h-64 sm:h-80';
+        return 'h-72 sm:h-96';
       case 'medium':
       default:
-        return 'h-36 sm:h-44';
+        return 'h-44 sm:h-52';
     }
-  }, [settings.heightMode]);
+  }, [settings.heightMode, isZenMode]);
 
   // Canvas Core Rendering Loop
   useEffect(() => {
@@ -923,24 +953,14 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
     };
   }, [settings, activePalette, isPlaying, masterVolume, tracks]);
 
-  // Mode button config list
-  const visualizerModesList: { mode: VisualizerMode; label: string; icon: any; desc: string }[] = [
-    { mode: 'spectrum', label: 'Espectro', icon: BarChart2, desc: 'RTA 32/64/128 Bandas con Picos de Estudio' },
-    { mode: 'curve', label: 'Curva FFT', icon: Activity, desc: 'Spline analógico suave y continuo con glow' },
-    { mode: 'oscilloscope', label: 'Onda PCM', icon: Waves, desc: 'Osciloscopio analógico en tiempo real' },
-    { mode: 'waterfall', label: 'Cascada', icon: Layers, desc: 'Sonograma termográfico 3D histórico' },
-    { mode: 'radial', label: 'Radial', icon: Disc3, desc: 'Mandala polar 360° circular' },
-    { mode: 'tunnel', label: 'Túnel 3D', icon: Radio, desc: 'Hiper-túnel cuántico reactivo a subgraves' },
-    { mode: 'particles', label: 'Partículas', icon: Sparkles, desc: 'Nebulosa gravitatoria con enjambre cinético' },
-    { mode: 'lissajous', label: 'Fase Lissajous', icon: Crosshair, desc: 'Goniometro de fase y correlación estéreo' },
-    { mode: 'terrain', label: 'Malla 3D', icon: Grid, desc: 'Topografía wireframe retro-futurista' },
-    { mode: 'orb', label: 'Púlsar Plasma', icon: Sun, desc: 'Orbe estelar biomecánico con corona solar' },
-  ];
-
   return (
     <div
       ref={containerRef}
-      className={`relative w-full ${heightClass} rounded-2xl bg-slate-950/95 border border-slate-800/80 shadow-2xl backdrop-blur-xl flex flex-col justify-between select-none transition-all duration-300 group overflow-hidden`}
+      className={`relative w-full ${heightClass} ${
+        isZenMode
+          ? 'overflow-hidden bg-slate-950'
+          : 'rounded-2xl bg-slate-950/95 border border-slate-800/80 shadow-2xl backdrop-blur-xl flex flex-col justify-between overflow-hidden'
+      } select-none transition-all duration-300 group`}
     >
       {/* Dynamic Background Glow Ambient */}
       <div
@@ -950,122 +970,201 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
         }}
       />
 
-      {/* Top Header Overlay: Live dBFS, Modes & Tools Bar */}
-      <div className="absolute top-2 left-2 sm:left-3 right-2 sm:right-3 z-10 flex items-center justify-between gap-1 sm:gap-2 pointer-events-none">
-        {/* Left: Indicator, Mode badge & Live dBFS */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0 pointer-events-auto">
-          <div className="flex items-center gap-1.5">
-            <span
-              className={`w-2.5 h-2.5 rounded-full transition-colors ${
-                isPlaying ? 'bg-emerald-400 shadow-[0_0_10px_#10B981]' : 'bg-slate-600'
-              }`}
-            />
-            <span className="text-[10px] sm:text-xs font-bold tracking-wider uppercase text-slate-200 hidden xs:inline">
-              MÁSTER
-            </span>
-          </div>
+      {/* Floating HUD is only rendered when NOT in Zen Mode (ZenModeView renders its own dedicated HUD) */}
+      {!isZenMode && (
+        <>
+          {/* Subtle exit immersion button when in Immersion Mode */}
+          {isImmersiveMode ? (
+            <button
+              onClick={() => setIsImmersiveMode(false)}
+              className="absolute top-2.5 right-2.5 z-20 px-2.5 py-1 rounded-xl bg-slate-950/70 hover:bg-slate-900 border border-slate-800/80 hover:border-cyan-500/50 text-slate-400 hover:text-cyan-300 text-[10px] font-semibold flex items-center gap-1.5 backdrop-blur-md shadow-lg transition-all cursor-pointer opacity-30 hover:opacity-100"
+              title="Salir del modo inmersión (volver a ver controles)"
+            >
+              <EyeOff className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Ver Controles</span>
+            </button>
+          ) : (
+            /* Floating HUD with auto-dimming when mouse is idle */
+            <div className="absolute top-2 left-2 sm:left-3 right-2 sm:right-3 z-10 flex flex-wrap items-center justify-between gap-1.5 pointer-events-none transition-all duration-300 opacity-40 hover:opacity-100 group-hover:opacity-100 focus-within:opacity-100">
+              {/* Left Pill: Live dBFS, indicator & Palette cycler */}
+              <div className="flex items-center gap-1.5 shrink-0 pointer-events-auto bg-slate-950/75 backdrop-blur-md px-2 py-1 rounded-xl border border-slate-800/80 shadow-lg">
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`w-2 h-2 rounded-full transition-colors ${
+                      isPlaying ? 'bg-emerald-400 shadow-[0_0_8px_#10B981]' : 'bg-slate-600'
+                    }`}
+                  />
+                  <span className="text-[10px] font-bold tracking-wider uppercase text-slate-200 hidden xs:inline">
+                    MÁSTER
+                  </span>
+                </div>
 
-          <span className="text-[9px] sm:text-[11px] font-mono tabular-nums text-cyan-300 font-bold bg-cyan-950/80 px-2 py-0.5 rounded-md border border-cyan-800/50 shadow-inner">
-            {isPlaying ? `${peakDb} dBFS` : 'STANDBY'}
-          </span>
+                <span className="text-[10px] font-mono tabular-nums text-cyan-300 font-bold bg-cyan-950/70 px-1.5 py-0.5 rounded border border-cyan-800/40">
+                  {isPlaying ? `${peakDb} dBFS` : 'STANDBY'}
+                </span>
 
-          {/* Active Palette Pill */}
-          <div
-            onClick={() => {
-              setActiveTab('colors');
-              setIsSettingsOpen(true);
-            }}
-            title={`Paleta actual: ${activePalette.name} (Clic para cambiar)`}
-            className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900/80 border border-slate-800 hover:border-slate-700 cursor-pointer transition-colors text-[9px] text-slate-300"
-          >
-            <span
-              className="w-2 h-2 rounded-full"
-              style={{ backgroundColor: activePalette.primary }}
-            />
-            <span className="truncate max-w-[80px]">{activePalette.name}</span>
-          </div>
-        </div>
-
-        {/* Center/Right: Quick Mode Selector & Settings Button */}
-        <div className="flex items-center gap-1 pointer-events-auto">
-          {/* Quick Mode Buttons (Primary 5) */}
-          <div className="flex items-center gap-0.5 p-0.5 bg-slate-900/90 backdrop-blur rounded-lg border border-slate-800 shadow-md">
-            {visualizerModesList.slice(0, 5).map((item) => {
-              const Icon = item.icon;
-              const isActive = settings.mode === item.mode;
-              return (
+                {/* Quick Palette Cycler Button */}
                 <button
-                  key={item.mode}
-                  onClick={() => updateSettings({ mode: item.mode })}
-                  title={item.desc}
-                  className={`p-1 sm:px-2 sm:py-1 text-[10px] font-semibold rounded flex items-center gap-1 transition-all cursor-pointer ${
-                    isActive
-                      ? 'bg-slate-800 text-cyan-300 shadow-sm border border-cyan-500/40'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
+                  onClick={handleCyclePalette}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setActiveTab('colors');
+                    setIsSettingsOpen(true);
+                  }}
+                  title={`Paleta: ${activePalette.name} (Clic para cambiar paleta, clic derecho para abrir ajustes)`}
+                  className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-slate-900/80 hover:bg-slate-800/90 border border-slate-700/80 hover:border-cyan-500/50 cursor-pointer transition-all text-[10px] text-slate-200"
                 >
-                  <Icon className="w-3 h-3" />
-                  <span className="hidden lg:inline">{item.label}</span>
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shadow-sm"
+                    style={{
+                      backgroundColor: activePalette.primary,
+                      boxShadow: `0 0 6px ${activePalette.glow}`,
+                    }}
+                  />
+                  <span className="hidden sm:inline font-medium">{activePalette.name}</span>
+                  <RotateCcw className="w-2.5 h-2.5 text-slate-400 hover:text-white" />
                 </button>
-              );
-            })}
-
-            {/* If an advanced mode (6-10) is active, show its active badge */}
-            {visualizerModesList.slice(5).some((m) => m.mode === settings.mode) && (
-              <div className="px-2 py-1 text-[10px] font-semibold rounded bg-cyan-950 text-cyan-300 border border-cyan-500/40 flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-cyan-400" />
-                <span className="capitalize">{settings.mode}</span>
               </div>
-            )}
-          </div>
 
-          {/* Quick Sensitivity & Smoothing Badges (Opens Dynamics Tab) */}
-          <button
-            onClick={() => {
-              setActiveTab('dynamics');
-              setIsSettingsOpen(true);
-            }}
-            title="Ajustar Sensibilidad y Suavizado anti-tembleque"
-            className="hidden md:flex items-center gap-1.5 px-2 py-1 text-[10px] font-mono rounded-lg bg-slate-900/90 border border-slate-800 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
-          >
-            <Activity className="w-3 h-3 text-cyan-400" />
-            <span>Sens: {settings.gain.toFixed(2)}x</span>
-            <span className="text-slate-600">|</span>
-            <span>Suav: {Math.round((settings.smoothing ?? 0.82) * 100)}%</span>
-          </button>
+              {/* Center Pill: ALL 10 Visualizer Modes */}
+              <div className="flex items-center gap-1 pointer-events-auto bg-slate-950/75 backdrop-blur-md p-1 rounded-xl border border-slate-800/80 shadow-lg max-w-[calc(100%-120px)] sm:max-w-none overflow-x-auto no-scrollbar">
+                {VISUALIZER_MODES_CONFIG.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = settings.mode === item.mode;
+                  return (
+                    <button
+                      key={item.mode}
+                      onClick={() => updateSettings({ mode: item.mode })}
+                      title={`${item.label}: ${item.desc}`}
+                      className={`px-2 py-1 text-[10px] font-semibold rounded-lg flex items-center gap-1.5 transition-all shrink-0 cursor-pointer ${
+                        isActive
+                          ? 'bg-cyan-500/25 text-cyan-200 border border-cyan-400/60 shadow-[0_0_10px_rgba(6,182,212,0.35)]'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/80 border border-transparent'
+                      }`}
+                    >
+                      <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-cyan-300' : 'text-slate-400'}`} />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
 
-          {/* Height Toggle (Compact / Medium / Tall) */}
-          <button
-            onClick={() => {
-              const nextHeight: VisualizerHeight =
-                settings.heightMode === 'compact'
-                  ? 'medium'
-                  : settings.heightMode === 'medium'
-                  ? 'tall'
-                  : 'compact';
-              updateSettings({ heightMode: nextHeight });
-            }}
-            title={`Cambiar tamaño de visualizador (${settings.heightMode})`}
-            className="p-1 sm:px-2 sm:py-1 text-[10px] rounded-lg bg-slate-900/90 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white cursor-pointer flex items-center gap-1 transition-all"
-          >
-            {settings.heightMode === 'tall' ? (
-              <Minimize2 className="w-3 h-3 text-cyan-400" />
-            ) : (
-              <Maximize2 className="w-3 h-3 text-slate-400" />
-            )}
-            <span className="hidden xl:inline capitalize">{settings.heightMode}</span>
-          </button>
+              {/* Right Pill: Quick Dynamics, Height, Immersion, & Studio Config */}
+              <div className="flex items-center gap-1 pointer-events-auto bg-slate-950/75 backdrop-blur-md p-1 rounded-xl border border-slate-800/80 shadow-lg shrink-0 relative">
+                {/* Dynamics Quick Adjust Popover Trigger */}
+                <div className="relative">
+                  <button
+                    onClick={() => setIsDynamicsOpen((v) => !v)}
+                    title="Ajustar Sensibilidad y Suavizado temporal"
+                    className={`px-2 py-1 text-[10px] font-mono rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
+                      isDynamicsOpen
+                        ? 'bg-cyan-950 text-cyan-300 border-cyan-500/50'
+                        : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    <Activity className="w-3 h-3 text-cyan-400" />
+                    <span className="hidden md:inline">Sens: {settings.gain.toFixed(2)}x</span>
+                    <span className="hidden md:inline text-slate-600">|</span>
+                    <span className="hidden md:inline">Suav: {Math.round((settings.smoothing ?? 0.82) * 100)}%</span>
+                    <span className="md:hidden">DSP</span>
+                  </button>
 
-          {/* Master Visualizer Config Button (Opens Modal Drawer) */}
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="px-2 sm:px-2.5 py-1 text-[10px] font-bold rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-lg shadow-cyan-900/30 border border-cyan-400/40 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-          >
-            <Sliders className="w-3 h-3" />
-            <span className="hidden sm:inline">Configurar</span>
-          </button>
-        </div>
-      </div>
+                  {/* Floating Dynamics Slider Popover */}
+                  {isDynamicsOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-56 p-3 rounded-xl bg-slate-900/95 border border-cyan-500/40 shadow-2xl backdrop-blur-xl z-30 space-y-3 animate-fade-in">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-200 border-b border-slate-800 pb-1.5">
+                        <span>Dinámica Visual</span>
+                        <button
+                          onClick={() => setIsDynamicsOpen(false)}
+                          className="text-slate-400 hover:text-white cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[10px] text-slate-300">
+                          <span>Sensibilidad (Ganancia)</span>
+                          <span className="font-mono text-cyan-400 font-bold">{settings.gain.toFixed(2)}x</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.2"
+                          max="2.5"
+                          step="0.05"
+                          value={settings.gain}
+                          onChange={(e) => updateSettings({ gain: parseFloat(e.target.value) })}
+                          className="w-full accent-cyan-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[10px] text-slate-300">
+                          <span>Suavizado Anti-Tembleque</span>
+                          <span className="font-mono text-cyan-400 font-bold">
+                            {Math.round((settings.smoothing ?? 0.82) * 100)}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.4"
+                          max="0.96"
+                          step="0.02"
+                          value={settings.smoothing ?? 0.82}
+                          onChange={(e) => updateSettings({ smoothing: parseFloat(e.target.value) })}
+                          className="w-full accent-cyan-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Height Mode Toggle */}
+                <button
+                  onClick={() => {
+                    const nextHeight: VisualizerHeight =
+                      settings.heightMode === 'compact'
+                        ? 'medium'
+                        : settings.heightMode === 'medium'
+                        ? 'tall'
+                        : 'compact';
+                    updateSettings({ heightMode: nextHeight });
+                  }}
+                  title={`Tamaño del visualizador: ${settings.heightMode} (Clic para cambiar)`}
+                  className="p-1 px-1.5 sm:px-2 sm:py-1 text-[10px] rounded-lg bg-slate-900/80 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white cursor-pointer flex items-center gap-1 transition-all"
+                >
+                  {settings.heightMode === 'tall' ? (
+                    <Minimize2 className="w-3 h-3 text-cyan-400" />
+                  ) : (
+                    <Maximize2 className="w-3 h-3 text-slate-400" />
+                  )}
+                  <span className="hidden xl:inline capitalize">{settings.heightMode}</span>
+                </button>
+
+                {/* Immersion Mode Button */}
+                <button
+                  onClick={() => setIsImmersiveMode(true)}
+                  title="Modo Inmersión Total (ocultar controles y maximizar visión)"
+                  className="p-1 px-1.5 sm:px-2 sm:py-1 text-[10px] rounded-lg bg-slate-900/80 border border-slate-800 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-300 cursor-pointer flex items-center gap-1 transition-all"
+                >
+                  <Eye className="w-3 h-3 text-cyan-400" />
+                  <span className="hidden lg:inline">Inmersión</span>
+                </button>
+
+                {/* Full Config Modal Button */}
+                <button
+                  onClick={() => setIsSettingsOpen(true)}
+                  title="Abrir Estudio de Visualización PRO (Paletas, Balística, Presets)"
+                  className="px-2 py-1 text-[10px] font-bold rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-md border border-cyan-400/40 flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                >
+                  <Sliders className="w-3 h-3" />
+                  <span className="hidden sm:inline">Ajustes</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Main Canvas Visualizer */}
       <canvas ref={canvasRef} className="w-full h-full block" />

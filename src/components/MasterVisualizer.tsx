@@ -382,24 +382,53 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
       (analyser as any).getByteFrequencyData(freqArray);
       (analyser as any).getByteTimeDomainData(timeArray);
 
+      // Detect if real Web Audio stream is actively producing physical sound
+      let realAudioSum = 0;
+      for (let b = 0; b < bufferLength; b++) {
+        if (freqArray[b] > 1) realAudioSum += freqArray[b];
+      }
+      const hasRealWebAudio = realAudioSum > 24;
+
+      // Active tracks playing (e.g. YouTube video tracks playing via iframe)
+      const activeYtTracks = tracks.filter(
+        (t) => t.type === 'youtube_video' && !t.muted && (t.volume ?? 0.8) > 0.01
+      );
+      const now = performance.now() * 0.001;
+
       // 2. Measure TRUE real-time peak dBFS
       let peakSample = 0;
       let leftEnergy = 0;
       let rightEnergy = 0;
 
-      for (let i = 0; i < bufferLength; i++) {
-        const sample = Math.abs((timeArray[i] - 128) / 128.0);
-        if (sample > peakSample) peakSample = sample;
+      if (hasRealWebAudio) {
+        for (let i = 0; i < bufferLength; i++) {
+          const sample = Math.abs((timeArray[i] - 128) / 128.0);
+          if (sample > peakSample) peakSample = sample;
 
-        // Approximate stereo correlation / phase
-        if (i % 2 === 0) leftEnergy += sample;
-        else rightEnergy += sample;
-      }
+          // Approximate stereo correlation / phase
+          if (i % 2 === 0) leftEnergy += sample;
+          else rightEnergy += sample;
+        }
 
-      const totalEnergy = leftEnergy + rightEnergy;
-      if (totalEnergy > 0.05) {
-        const corr = Math.max(-1, Math.min(1, (1 - Math.abs(leftEnergy - rightEnergy) / totalEnergy) * 2 - 1));
-        setStereoCorr(corr);
+        const totalEnergy = leftEnergy + rightEnergy;
+        if (totalEnergy > 0.05) {
+          const corr = Math.max(-1, Math.min(1, (1 - Math.abs(leftEnergy - rightEnergy) / totalEnergy) * 2 - 1));
+          setStereoCorr(corr);
+        }
+      } else if (activeYtTracks.length > 0) {
+        // Pure YouTube iframe audio: generate organic stereo time-domain data for oscilloscope / lissajous
+        const netVol =
+          activeYtTracks.reduce((acc, t) => acc + (t.volume ?? 0.8), 0) /
+          Math.max(1, Math.sqrt(activeYtTracks.length));
+        peakSample = Math.min(1.0, netVol * masterVolume * 0.65);
+        const amp = Math.min(48, peakSample * 65);
+
+        for (let i = 0; i < bufferLength; i++) {
+          const ph = now * 10 + (i / bufferLength) * 12;
+          const w = Math.sin(ph) * 0.6 + Math.sin(ph * 1.8 + 0.6) * 0.28 + Math.sin(ph * 0.45) * 0.12;
+          timeArray[i] = Math.round(128 + w * amp);
+        }
+        setStereoCorr(0.85 + Math.sin(now * 0.4) * 0.1);
       }
 
       // 3. True Logarithmic ISO RTA Binning (20 Hz to 20,000 Hz)
@@ -413,25 +442,53 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
       for (let i = 0; i < BARS_COUNT; i++) {
         const fLow = 20 * Math.pow(1000, i / BARS_COUNT);
         const fHigh = 20 * Math.pow(1000, (i + 1) / BARS_COUNT);
+        const fCenter = (fLow + fHigh) * 0.5;
 
-        const binStart = Math.max(1, Math.min(bufferLength - 1, Math.floor(fLow / binHz)));
-        const binEnd = Math.max(binStart, Math.min(bufferLength - 1, Math.ceil(fHigh / binHz)));
+        let targetVal = 0;
 
-        let bandPeak = 0;
-        let bandSum = 0;
-        let binCount = 0;
-        for (let b = binStart; b <= binEnd; b++) {
-          const val = freqArray[b];
-          if (val > bandPeak) bandPeak = val;
-          bandSum += val;
-          binCount++;
+        if (hasRealWebAudio) {
+          const binStart = Math.max(1, Math.min(bufferLength - 1, Math.floor(fLow / binHz)));
+          const binEnd = Math.max(binStart, Math.min(bufferLength - 1, Math.ceil(fHigh / binHz)));
+
+          let bandPeak = 0;
+          let bandSum = 0;
+          let binCount = 0;
+          for (let b = binStart; b <= binEnd; b++) {
+            const val = freqArray[b];
+            if (val > bandPeak) bandPeak = val;
+            bandSum += val;
+            binCount++;
+          }
+
+          const bandEnergy = binCount > 1 ? bandPeak * 0.75 + (bandSum / binCount) * 0.25 : bandPeak;
+          targetVal = Math.min(255, bandEnergy * gainFactor);
+        } else if (activeYtTracks.length > 0) {
+          // Acoustic energy synthesis for active YouTube tracks (smooth natural studio RTA curve)
+          let ytEnergy = 0;
+          for (const tr of activeYtTracks) {
+            const trVol = (tr.volume ?? 0.8) * (masterVolume / 1.0);
+            const trCutoff = Math.min(tr.filterCutoff || 20000, masterFilter || 20000);
+
+            // Studio pink noise natural acoustic curve: smooth -3.5dB/octave slope
+            let curve = Math.pow(1 / (1 + fCenter / 420), 0.38);
+
+            // Low-pass filter attenuation matching track & master filter
+            if (fCenter > trCutoff) {
+              const ratio = fCenter / trCutoff;
+              curve *= Math.max(0, 1 / (1 + (ratio - 1) * 3));
+            }
+
+            // Organic multi-harmonic spatial breathing (fluid, natural, non-periodic)
+            const m1 = Math.sin(now * 1.5 + i * 0.15) * 0.12;
+            const m2 = Math.cos(now * 0.8 - i * 0.24) * 0.10;
+            const m3 = Math.sin(now * 2.6 + i * 0.36) * 0.06;
+            const flutter = 1.0 + m1 + m2 + m3;
+
+            ytEnergy += curve * flutter * trVol * 190;
+          }
+          ytEnergy = ytEnergy / Math.max(1, Math.sqrt(activeYtTracks.length));
+          targetVal = Math.min(255, ytEnergy * gainFactor);
         }
-
-        // Blended peak and average energy to eliminate single-sample impulse spikes
-        const bandEnergy = binCount > 1 ? bandPeak * 0.75 + (bandSum / binCount) * 0.25 : bandPeak;
-
-        // Apply calibrated gain factor
-        const targetVal = Math.min(255, bandEnergy * gainFactor);
 
         if (i < BARS_COUNT * 0.2) bassEnergy += targetVal;
         if (i > BARS_COUNT * 0.7) highEnergy += targetVal;

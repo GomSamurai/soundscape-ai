@@ -25,6 +25,7 @@ import {
   Layers,
   Zap,
   Filter,
+  Sliders,
 } from 'lucide-react';
 import { SoundscapeProject } from '../types/soundscape';
 import { ButterchurnVisualizer } from './ButterchurnVisualizer';
@@ -34,6 +35,12 @@ import {
   PresetCategory,
   PresetMetadata,
 } from '../services/milkdropPresetService';
+import {
+  MilkdropConfig,
+  loadMilkdropConfig,
+  saveMilkdropConfig,
+} from '../types/milkdropConfig';
+import { MilkdropConfigPanel } from './MilkdropConfigPanel';
 
 interface ZenModeViewProps {
   project: SoundscapeProject;
@@ -86,6 +93,11 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
     audioEngine.isLiveTabAudioActive()
   );
 
+  // MilkDrop Parameter Customization & Live Physics State
+  const [config, setConfig] = useState<MilkdropConfig>(() => loadMilkdropConfig());
+  const [isConfigOpen, setIsConfigOpen] = useState<boolean>(false);
+  const [presetData, setPresetData] = useState<any>(null);
+
   // Listen to preset updates & favorites from ButterchurnVisualizer & Service
   useEffect(() => {
     const handlePresetChange = (e: any) => {
@@ -97,6 +109,9 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
       }
       if (e.detail?.onlyReactive !== undefined) {
         setOnlyReactive(e.detail.onlyReactive);
+      }
+      if (e.detail?.presetData) {
+        setPresetData(e.detail.presetData);
       }
     };
 
@@ -112,16 +127,24 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
       setOnlyReactive(e.detail?.onlyReactive ?? milkdropPresetService.getOnlyReactiveMode());
     };
 
+    const handleConfigChange = (e: any) => {
+      if (e.detail?.config) {
+        setConfig(e.detail.config);
+      }
+    };
+
     window.addEventListener('butterchurn_preset_changed', handlePresetChange);
     window.addEventListener('tab_audio_capture_changed', handleTabAudioChange);
     window.addEventListener('butterchurn_favorites_changed', handleFavsChange);
     window.addEventListener('butterchurn_reactive_mode_changed', handleReactiveChange);
+    window.addEventListener('butterchurn_config_updated', handleConfigChange);
 
     return () => {
       window.removeEventListener('butterchurn_preset_changed', handlePresetChange);
       window.removeEventListener('tab_audio_capture_changed', handleTabAudioChange);
       window.removeEventListener('butterchurn_favorites_changed', handleFavsChange);
       window.removeEventListener('butterchurn_reactive_mode_changed', handleReactiveChange);
+      window.removeEventListener('butterchurn_config_updated', handleConfigChange);
     };
   }, []);
 
@@ -252,6 +275,8 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
         handleToggleReactiveMode();
       } else if (e.key.toLowerCase() === 's' || e.key === '*') {
         handleToggleFavorite();
+      } else if (e.key.toLowerCase() === 'c') {
+        setIsConfigOpen((v) => !v);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -423,6 +448,18 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
           >
             <List className="w-3.5 h-3.5 text-cyan-400" />
             <span className="text-[11px] font-medium hidden sm:inline">Presets (500)</span>
+          </button>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsConfigOpen(true);
+            }}
+            title="Ajustes de MilkDrop: Físicas, Sonido, Colores, Velocidad y Código (C)"
+            className="p-1.5 hover:bg-slate-800/80 text-cyan-400 hover:text-cyan-200 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 text-xs"
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span className="text-[11px] font-semibold hidden md:inline">Ajustes</span>
           </button>
         </div>
 
@@ -598,6 +635,15 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
             <Star className={`w-4 h-4 ${isCurrentFavorite ? 'fill-amber-400' : ''}`} />
           </button>
 
+          {/* Quick MilkDrop Config Launcher */}
+          <button
+            onClick={() => setIsConfigOpen(true)}
+            title="Ajustes de MilkDrop: Físicas, Sonido, Colores, Velocidad y Código (C)"
+            className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-cyan-400 hover:text-cyan-200 hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            <Sliders className="w-4 h-4" />
+          </button>
+
           {/* Sleep / Pomodoro Timer Launcher */}
           <button
             onClick={onOpenTimerModal}
@@ -614,7 +660,7 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
 
         {/* Subtle Micro-hint */}
         <p className="text-[10px] text-slate-500 mt-2 pointer-events-auto">
-          Clic en el fondo: siguiente preset · B: Modo Beat Sync · S: Favorito · Espacio: Pausa · Esc: Salir
+          Clic en el fondo: siguiente preset · C: Ajustes de MilkDrop · B: Modo Beat Sync · S: Favorito · Espacio: Pausa · Esc: Salir
         </p>
       </div>
 
@@ -861,6 +907,19 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* MilkDrop Internal Parameters & Physics Calibration Panel */}
+      <MilkdropConfigPanel
+        isOpen={isConfigOpen}
+        onClose={() => setIsConfigOpen(false)}
+        config={config}
+        onChangeConfig={(newCfg) => {
+          setConfig(newCfg);
+          saveMilkdropConfig(newCfg);
+        }}
+        currentPresetName={currentPresetName}
+        presetData={presetData}
+      />
     </div>
   );
 };

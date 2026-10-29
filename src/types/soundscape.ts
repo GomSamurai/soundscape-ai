@@ -20,6 +20,7 @@ export type SynthModel =
   | 'singing_bowl'
   | 'wind_stream'
   | 'ocean_synth'
+  | 'vinyl'
   | 'vinyl_crackle';
 
 export type MidiScale =

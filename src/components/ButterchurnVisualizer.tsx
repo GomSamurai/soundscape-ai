@@ -26,7 +26,14 @@ import {
   Filter,
   Layers,
   Zap,
+  Sliders,
 } from 'lucide-react';
+import {
+  MilkdropConfig,
+  loadMilkdropConfig,
+  saveMilkdropConfig,
+} from '../types/milkdropConfig';
+import { MilkdropConfigPanel } from './MilkdropConfigPanel';
 
 const getButterchurn = () => {
   const mod: any = butterchurn;
@@ -83,6 +90,54 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
     audioEngine.isLiveTabAudioActive()
   );
   const [tabAudioError, setTabAudioError] = useState<string | null>(null);
+
+  // MilkDrop Parameter Customization & Live Physics State
+  const [config, setConfig] = useState<MilkdropConfig>(() => loadMilkdropConfig());
+  const [isConfigOpen, setIsConfigOpen] = useState<boolean>(false);
+  const configRef = useRef<MilkdropConfig>(config);
+  const dynamicHueRef = useRef<number>(config.hueRotate);
+
+  // Sync configRef & audio sensitivity on change
+  useEffect(() => {
+    configRef.current = config;
+    dynamicHueRef.current = config.hueRotate;
+    audioEngine.setVisualizerSensitivity(config.audioGain, config.bassBoost, config.trebleBoost);
+    if (canvasRef.current && config.colorCycleSpeed === 0) {
+      canvasRef.current.style.filter = `hue-rotate(${config.hueRotate}deg) saturate(${config.saturation}%) contrast(${config.contrast}%) brightness(${config.brightness}%) ${config.invert ? 'invert(1)' : ''}`;
+    }
+  }, [config]);
+
+  // Listen for config sync & open events across components (Zen mode <-> Normal)
+  useEffect(() => {
+    const handleConfigChange = (e: any) => {
+      if (e.detail?.config) {
+        setConfig(e.detail.config);
+      }
+    };
+    const handleOpenCfg = () => setIsConfigOpen(true);
+
+    window.addEventListener('butterchurn_config_updated', handleConfigChange);
+    window.addEventListener('butterchurn_open_config', handleOpenCfg);
+
+    return () => {
+      window.removeEventListener('butterchurn_config_updated', handleConfigChange);
+      window.removeEventListener('butterchurn_open_config', handleOpenCfg);
+    };
+  }, []);
+
+  // Shortcut 'C' key toggles configuration panel
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isSearchOpen) return;
+      if (e.key.toLowerCase() === 'c' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = e.target as HTMLElement;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) return;
+        setIsConfigOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isSearchOpen]);
 
   const presetsMapRef = useRef<Record<string, any>>({});
   const allNamesRef = useRef<string[]>([]);
@@ -189,12 +244,57 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
       return;
     }
 
-    // High performance GPU Render Loop (always renders procedural shaders, reactive when playing)
+    // High performance GPU Render Loop with Time Dilation & Dynamic Physics Overrides
+    let lastRenderTime = performance.now();
+    let dynamicHue = configRef.current.hueRotate;
+
     const renderLoop = () => {
       animIdRef.current = requestAnimationFrame(renderLoop);
       if (visualizerRef.current) {
         try {
-          visualizerRef.current.render();
+          const cfg = configRef.current;
+          const now = performance.now();
+          const dt = Math.max(0.001, Math.min(0.1, (now - lastRenderTime) / 1000));
+          lastRenderTime = now;
+
+          // 1. Dynamic WebGL Canvas Color Grading / Dynamic Prism Rotation
+          if (canvasRef.current) {
+            if (cfg.colorCycleSpeed > 0) {
+              dynamicHue = (dynamicHue + cfg.colorCycleSpeed * dt * 40) % 360;
+              canvasRef.current.style.filter = `hue-rotate(${Math.round(dynamicHue)}deg) saturate(${cfg.saturation}%) contrast(${cfg.contrast}%) brightness(${cfg.brightness}%) ${cfg.invert ? 'invert(1)' : ''}`;
+            } else {
+              canvasRef.current.style.filter = `hue-rotate(${cfg.hueRotate}deg) saturate(${cfg.saturation}%) contrast(${cfg.contrast}%) brightness(${cfg.brightness}%) ${cfg.invert ? 'invert(1)' : ''}`;
+            }
+          }
+
+          // 2. Dynamic live physics & geometry override into Milkdrop equations
+          const activePreset = visualizerRef.current?.renderer?.presetEquationRunner?.preset;
+          if (activePreset && activePreset.baseVals) {
+            const b = activePreset.baseVals;
+            if (activePreset.__origZoom === undefined) {
+              activePreset.__origZoom = b.zoom !== undefined ? b.zoom : 1.0;
+              activePreset.__origWarp = b.warp !== undefined ? b.warp : 1.0;
+              activePreset.__origRot = b.rot !== undefined ? b.rot : 0.0;
+              activePreset.__origWaveScale = b.wave_scale !== undefined ? b.wave_scale : 1.0;
+              activePreset.__origDecay = b.decay !== undefined ? b.decay : 0.98;
+              activePreset.__origWaveMode = b.wave_mode !== undefined ? b.wave_mode : 0;
+            }
+
+            b.zoom = activePreset.__origZoom * cfg.zoomMultiplier;
+            b.warp = activePreset.__origWarp * cfg.warpMultiplier;
+            b.rot = activePreset.__origRot + cfg.rotationSpeed;
+            b.wave_scale = activePreset.__origWaveScale * cfg.waveScale;
+
+            if (cfg.useCustomDecay) {
+              b.decay = cfg.decay;
+            }
+            if (cfg.waveModeOverride >= 0) {
+              b.wave_mode = cfg.waveModeOverride;
+            }
+          }
+
+          // 3. Render frame with animation speed time dilation
+          visualizerRef.current.render({ elapsedTime: dt * cfg.animationSpeed });
         } catch (e) {}
       }
     };
@@ -242,6 +342,7 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
             isFavorite: isFav,
             onlyReactive,
             metadata: meta,
+            presetData: presetsMapRef.current[name],
           },
         })
       );
@@ -331,6 +432,7 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
             isFavorite: isFav,
             onlyReactive,
             metadata: meta,
+            presetData: presetsMapRef.current[currentPresetName],
           },
         })
       );
@@ -553,6 +655,15 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
                   className="p-1.5 hover:bg-slate-800/80 text-slate-300 hover:text-white rounded-lg transition-colors cursor-pointer"
                 >
                   <ChevronRight className="w-4 h-4" />
+                </button>
+                <span className="w-px h-4 bg-slate-800 mx-0.5" />
+                <button
+                  onClick={() => setIsConfigOpen(true)}
+                  title="Calibrar MilkDrop: Físicas, Sonido, Colores, Velocidad y Código (C)"
+                  className="p-1.5 hover:bg-slate-800/80 text-cyan-400 hover:text-cyan-200 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-semibold hidden md:inline">Ajustes</span>
                 </button>
                 <span className="w-px h-4 bg-slate-800 mx-0.5" />
                 <button
@@ -868,6 +979,19 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
           )}
         </>
       )}
+
+      {/* MilkDrop Internal Config & Physics Calibration Panel */}
+      <MilkdropConfigPanel
+        isOpen={isConfigOpen}
+        onClose={() => setIsConfigOpen(false)}
+        config={config}
+        onChangeConfig={(newCfg) => {
+          setConfig(newCfg);
+          saveMilkdropConfig(newCfg);
+        }}
+        currentPresetName={currentPresetName}
+        presetData={presetsMapRef.current[currentPresetName]}
+      />
     </div>
   );
 };

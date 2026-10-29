@@ -56,6 +56,9 @@ class AudioEngine {
   private tabAudioStream: MediaStream | null = null;
   private tabAudioSource: MediaStreamAudioSourceNode | null = null;
   private visualizerNode: GainNode | null = null;
+  private visInputGain: GainNode | null = null;
+  private visBassFilter: BiquadFilterNode | null = null;
+  private visTrebleFilter: BiquadFilterNode | null = null;
   private ytAcousticBus: GainNode | null = null;
 
   public getAudioContext(): AudioContext {
@@ -177,10 +180,28 @@ class AudioEngine {
     this.masterGain.connect(this.ctx.destination);
     this.masterGain.connect(this.mediaDest);
 
-    // Dedicated Visualizer Tap Node (silent to speakers, feeds visualizer and masterAnalyser)
+    // Dedicated Visualizer Pre-Processing & Frequency Shaping Chain (silent to speakers)
+    this.visBassFilter = this.ctx.createBiquadFilter();
+    this.visBassFilter.type = 'lowshelf';
+    this.visBassFilter.frequency.value = 120;
+    this.visBassFilter.gain.value = 4.0; // dB
+
+    this.visTrebleFilter = this.ctx.createBiquadFilter();
+    this.visTrebleFilter.type = 'highshelf';
+    this.visTrebleFilter.frequency.value = 4000;
+    this.visTrebleFilter.gain.value = 0.0; // dB
+
+    this.visInputGain = this.ctx.createGain();
+    this.visInputGain.gain.value = 1.2;
+
     this.visualizerNode = this.ctx.createGain();
     this.visualizerNode.gain.value = 1.0;
-    this.masterGain.connect(this.visualizerNode);
+
+    // Route: Master Gain -> visBassFilter -> visTrebleFilter -> visInputGain -> visualizerNode -> masterAnalyser
+    this.masterGain.connect(this.visBassFilter);
+    this.visBassFilter.connect(this.visTrebleFilter);
+    this.visTrebleFilter.connect(this.visInputGain);
+    this.visInputGain.connect(this.visualizerNode);
     this.visualizerNode.connect(this.masterAnalyser);
 
     this.setupYouTubeAcousticDriver();
@@ -345,6 +366,23 @@ class AudioEngine {
     return (this.visualizerNode as AudioNode) || (this.masterGain as AudioNode) || this.getAudioContext().destination;
   }
 
+  public setVisualizerSensitivity(gain = 1.2, bassBoostDb = 4, trebleBoostDb = 0) {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    if (this.visInputGain) {
+      const clampedGain = Math.max(0.1, Math.min(6.0, gain));
+      this.visInputGain.gain.setTargetAtTime(clampedGain, now, 0.04);
+    }
+    if (this.visBassFilter) {
+      const clampedBass = Math.max(-20, Math.min(24, bassBoostDb));
+      this.visBassFilter.gain.setTargetAtTime(clampedBass, now, 0.04);
+    }
+    if (this.visTrebleFilter) {
+      const clampedTreb = Math.max(-20, Math.min(20, trebleBoostDb));
+      this.visTrebleFilter.gain.setTargetAtTime(clampedTreb, now, 0.04);
+    }
+  }
+
   public updateActiveTracksAcoustics(tracks: ChannelTrack[], masterVolume: number, isPlaying: boolean) {
     if (!this.ctx || !this.ytAcousticBus) return;
     const now = this.ctx.currentTime;
@@ -427,8 +465,12 @@ class AudioEngine {
       noiseGain.connect(this.ytAcousticBus);
       noiseSrc.start();
 
-      // Connect to visualizerNode ONLY (zero audio to ctx.destination, completely inaudible to speakers)
-      this.ytAcousticBus.connect(this.visualizerNode);
+      // Connect to visualizer pre-processing filter chain (zero audio to ctx.destination, completely inaudible to speakers)
+      if (this.visBassFilter) {
+        this.ytAcousticBus.connect(this.visBassFilter);
+      } else {
+        this.ytAcousticBus.connect(this.visualizerNode);
+      }
     } catch (e) {
       console.warn('Could not initialize YouTube acoustic driver:', e);
     }
@@ -475,11 +517,13 @@ class AudioEngine {
       this.tabAudioStream = stream;
       this.tabAudioSource = ctx.createMediaStreamSource(stream);
 
-      // Connect strictly to masterAnalyser and visualizerNode (zero speaker echo, zero feedback)
+      // Connect strictly to masterAnalyser and visualizer filter chain (zero speaker echo, zero feedback)
       if (this.masterAnalyser) {
         this.tabAudioSource.connect(this.masterAnalyser);
       }
-      if (this.visualizerNode) {
+      if (this.visBassFilter) {
+        this.tabAudioSource.connect(this.visBassFilter);
+      } else if (this.visualizerNode) {
         this.tabAudioSource.connect(this.visualizerNode);
       }
 

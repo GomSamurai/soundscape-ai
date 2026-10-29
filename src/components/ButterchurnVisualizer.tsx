@@ -633,6 +633,18 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
                 </span>
               </button>
 
+              {/* Dedicated MilkDrop Calibration & Physics Button */}
+              <button
+                onClick={() => setIsConfigOpen(true)}
+                title="Abrir Calibrador de Parámetros: Físicas, Velocidad, Reacción al Sonido, Colores y Código (Atajo: C)"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold backdrop-blur-xl transition-all cursor-pointer shadow-lg border bg-cyan-950/90 border-cyan-400 text-cyan-200 hover:bg-cyan-900 shadow-cyan-500/25 ring-1 ring-cyan-500/50"
+              >
+                <Sliders className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                <span className="text-[11px] font-bold">
+                  🎛️ Ajustes & Físicas (C)
+                </span>
+              </button>
+
               {/* Preset Controls Group */}
               <div className="flex items-center gap-1 bg-slate-950/85 backdrop-blur-xl px-2 py-1 rounded-xl border border-slate-800 shadow-2xl">
                 <button
@@ -756,12 +768,25 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setIsSearchOpen(false)}
-                  className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setIsSearchOpen(false);
+                      setIsConfigOpen(true);
+                    }}
+                    title="Abrir Calibrador de Físicas, Velocidad y Reacción al Sonido (C)"
+                    className="px-3 py-1.5 rounded-xl bg-cyan-950 hover:bg-cyan-900 border border-cyan-400 text-cyan-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-cyan-500/20 ring-1 ring-cyan-500/40"
+                  >
+                    <Sliders className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                    <span>🎛️ Calibrar Físicas & Audio (C)</span>
+                  </button>
+                  <button
+                    onClick={() => setIsSearchOpen(false)}
+                    className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               {/* Category Filter Tabs */}

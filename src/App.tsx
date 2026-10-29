@@ -827,6 +827,15 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => window.dispatchEvent(new CustomEvent('butterchurn_open_config'))}
+              className="p-1.5 sm:px-2.5 sm:py-1 text-xs font-semibold rounded-lg bg-cyan-950/90 hover:bg-cyan-900 border border-cyan-400 text-cyan-200 hover:text-white transition-all flex items-center gap-1.5 shadow-md shadow-cyan-500/20 cursor-pointer"
+              title="Calibrador de Físicas, Sonido, Velocidad y Shaders MilkDrop (Atajo: C)"
+            >
+              <Sliders className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+              <span className="hidden sm:inline">🎛️ Físicas MilkDrop</span>
+            </button>
+
+            <button
               onClick={() => setIsAiModalOpen(true)}
               className="px-2.5 py-1 text-xs font-bold rounded-lg bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-md transition-all flex items-center gap-1 cursor-pointer"
             >

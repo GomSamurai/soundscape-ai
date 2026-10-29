@@ -580,123 +580,15 @@ export class GenerativeAudioService {
     return () => cleanups.forEach((fn) => fn());
   }
 
-  // --- ACOUSTIC TRACKING GENERATOR FOR YOUTUBE VIDEOS ---
-  // Connects EXCLUSIVELY to masterAnalyser so the Master Visualizer & meters
-  // reflect the dynamic spectrum of playing YouTube videos without audio leakage.
+  // --- ACOUSTIC TRACKING FOR YOUTUBE VIDEOS ---
+  // YouTube videos play via external sandboxed iframes. Zero phantom/synthetic oscillators
+  // are generated or injected into the analysis chain, ensuring 100% authentic acoustic
+  // fidelity and eliminating artificial mid-range frequency humps/oscillations.
   public static createYouTubeAcousticTracker(
-    track: ChannelTrack,
-    destination: AudioNode,
-    ctx: AudioContext
+    _track: ChannelTrack,
+    _destination: AudioNode,
+    _ctx: AudioContext
   ): () => void {
-    const cleanups: (() => void)[] = [];
-    const key = (track.soundKey || '').toLowerCase();
-    const name = (track.name || '').toLowerCase();
-
-    // Multiband spectrum synthesis matching the acoustic footprint of the video
-    let osc1Type: OscillatorType = 'sine';
-    let osc2Type: OscillatorType = 'triangle';
-    let f1 = 80;
-    let f2 = 320;
-    let f3 = 1800;
-
-    if (key.includes('cyberpunk') || name.includes('blade runner')) {
-      osc1Type = 'sawtooth';
-      osc2Type = 'triangle';
-      f1 = 55; // Sub-bass A1
-      f2 = 220; // Synth lead
-      f3 = 4500; // Rain/neon shimmer
-    } else if (key.includes('jazz') || key.includes('lofi') || name.includes('piano')) {
-      osc1Type = 'sine';
-      osc2Type = 'triangle';
-      f1 = 65; // Kick/Bass
-      f2 = 440; // Piano chords
-      f3 = 3200; // Snare/Hi-hat
-    } else if (key.includes('rain') || key.includes('thunder') || name.includes('lluvia')) {
-      osc1Type = 'triangle';
-      osc2Type = 'sine';
-      f1 = 90; // Thunder roll
-      f2 = 1400; // Rain body
-      f3 = 5800; // High drops
-    } else if (key.includes('fire') || name.includes('chimenea')) {
-      f1 = 120; // Fire combustion
-      f2 = 800; // Heat resonance
-      f3 = 4200; // Crackle
-    } else {
-      f1 = 75;
-      f2 = 500;
-      f3 = 2400;
-    }
-
-    // Low band generator (bass / rhythm transient)
-    const lowOsc = ctx.createOscillator();
-    const lowGain = ctx.createGain();
-    lowOsc.type = osc1Type;
-    lowOsc.frequency.value = f1;
-    lowGain.gain.value = 0.28;
-
-    // Mid band generator (melody / chord harmonic body)
-    const midOsc = ctx.createOscillator();
-    const midGain = ctx.createGain();
-    midOsc.type = osc2Type;
-    midOsc.frequency.value = f2;
-    midGain.gain.value = 0.22;
-
-    // High band generator (organic texture / percussion)
-    const highBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-    const hData = highBuffer.getChannelData(0);
-    for (let i = 0; i < hData.length; i++) hData[i] = Math.random() * 2 - 1;
-    const highSrc = ctx.createBufferSource();
-    highSrc.buffer = highBuffer;
-    highSrc.loop = true;
-
-    const highFilter = ctx.createBiquadFilter();
-    highFilter.type = 'bandpass';
-    highFilter.frequency.value = f3;
-    highFilter.Q.value = 1.2;
-
-    const highGain = ctx.createGain();
-    highGain.gain.value = 0.18;
-
-    // Subtle natural rhythmic cadence modulator to breathe life into the spectrum
-    const cadenceLfo = ctx.createOscillator();
-    const cadenceGain = ctx.createGain();
-    cadenceLfo.type = 'sine';
-    cadenceLfo.frequency.value = 0.65; // ~78 BPM natural musical cadence
-    cadenceGain.gain.value = 0.08;
-
-    cadenceLfo.connect(cadenceGain);
-    cadenceGain.connect(midGain.gain);
-
-    lowOsc.connect(lowGain);
-    midOsc.connect(midGain);
-    highSrc.connect(highFilter);
-    highFilter.connect(highGain);
-
-    lowGain.connect(destination);
-    midGain.connect(destination);
-    highGain.connect(destination);
-
-    lowOsc.start();
-    midOsc.start();
-    highSrc.start();
-    cadenceLfo.start();
-
-    cleanups.push(() => {
-      try {
-        lowOsc.stop();
-        midOsc.stop();
-        highSrc.stop();
-        cadenceLfo.stop();
-        lowOsc.disconnect();
-        midOsc.disconnect();
-        highSrc.disconnect();
-        cadenceLfo.disconnect();
-        lowGain.disconnect();
-        midGain.disconnect();
-        highGain.disconnect();
-      } catch (e) {}
-    });
-
-    return () => cleanups.forEach((fn) => fn());
+    return () => {};
   }
 }

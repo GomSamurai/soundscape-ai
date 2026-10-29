@@ -39,7 +39,6 @@ class AudioEngine {
   private masterHighEq: BiquadFilterNode | null = null;
   private masterCompressor: DynamicsCompressorNode | null = null;
   private masterAnalyser: AnalyserNode | null = null;
-  private youtubeTrackingBus: GainNode | null = null;
   private reverbNode: ConvolverNode | null = null;
   private reverbMasterGain: GainNode | null = null;
   private masterReverbSend: GainNode | null = null;
@@ -176,11 +175,6 @@ class AudioEngine {
 
     // Pure Web Audio master chain to Analyser (100% authentic physical sound from master output)
     this.masterGain.connect(this.masterAnalyser);
-
-    // Dedicated YouTube Acoustic Tracking Bus (routes ONLY to masterAnalyser, zero speaker leakage)
-    this.youtubeTrackingBus = this.ctx.createGain();
-    this.youtubeTrackingBus.gain.value = 0.85;
-    this.youtubeTrackingBus.connect(this.masterAnalyser);
   }
 
   // Algorithmic high-fidelity room/hall impulse response
@@ -205,9 +199,6 @@ class AudioEngine {
     const clamped = Math.max(0, Math.min(1.2, value));
     if (this.masterGain) {
       this.masterGain.gain.setTargetAtTime(clamped, this.ctx.currentTime, 0.05);
-    }
-    if (this.youtubeTrackingBus) {
-      this.youtubeTrackingBus.gain.setTargetAtTime(clamped, this.ctx.currentTime, 0.05);
     }
   }
 
@@ -462,12 +453,7 @@ class AudioEngine {
       gain.connect(pan);
       pan.connect(analyser);
 
-      if (track.type === 'youtube_video') {
-        // Dedicated YouTube tracking bus to masterAnalyser ONLY (zero double audio to speakers)
-        if (this.youtubeTrackingBus) {
-          analyser.connect(this.youtubeTrackingBus);
-        }
-      } else {
+      if (track.type !== 'youtube_video') {
         if (this.masterFilter) {
           analyser.connect(this.masterFilter);
           delay.connect(this.masterFilter);
@@ -522,8 +508,7 @@ class AudioEngine {
 
   private setupTrackSource(track: ChannelTrack, nodes: ChannelAudioNodes, ctx: AudioContext) {
     if (track.type === 'youtube_video') {
-      const trackerCleanup = GenerativeAudioService.createYouTubeAcousticTracker(track, nodes.filterNode, ctx);
-      nodes.cleanup = trackerCleanup;
+      nodes.cleanup = () => {};
     } else if (track.type === 'midi_random') {
       const res = GenerativeAudioService.createMidiInstrument(
         track,

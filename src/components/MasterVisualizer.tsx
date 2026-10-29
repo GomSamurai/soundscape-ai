@@ -112,8 +112,25 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
     return () => window.removeEventListener('visualizer_settings_changed', handleSync);
   }, []);
 
-  // Stereo correlation
   const [stereoCorr, setStereoCorr] = useState<number>(1.0);
+  const [isTabAudioActive, setIsTabAudioActive] = useState<boolean>(() => audioEngine.isLiveTabAudioActive());
+
+  useEffect(() => {
+    const handleCaptureChange = (e: any) => {
+      setIsTabAudioActive(!!e.detail?.active);
+    };
+    window.addEventListener('tab_audio_capture_changed', handleCaptureChange);
+    return () => window.removeEventListener('tab_audio_capture_changed', handleCaptureChange);
+  }, []);
+
+  const handleToggleTabAudioSync = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isTabAudioActive) {
+      audioEngine.disableLiveTabAudioCapture();
+    } else {
+      await audioEngine.enableLiveTabAudioCapture();
+    }
+  };
 
   // References for Animation & Memory
   const animationFrameId = useRef<number | null>(null);
@@ -1029,20 +1046,40 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
       <div className="flex-1 min-w-0 relative h-full overflow-hidden flex flex-col justify-between">
         {!isZenMode && (
           <>
-            {/* Top-left subtle indicator badge */}
-            <div className="absolute top-2.5 left-3 z-10 pointer-events-none flex items-center gap-2 px-2.5 py-1 rounded-xl bg-slate-950/70 border border-slate-800/80 backdrop-blur-md opacity-75 group-hover:opacity-100 transition-opacity">
-              <span
-                className={`w-2 h-2 rounded-full transition-all ${
-                  isPlaying ? 'bg-emerald-400 shadow-[0_0_8px_#10B981]' : 'bg-slate-600'
+            {/* Top-left subtle indicator badge and Live Sync button */}
+            <div className="absolute top-2.5 left-3 z-10 flex items-center gap-2">
+              <div className="pointer-events-none flex items-center gap-2 px-2.5 py-1 rounded-xl bg-slate-950/70 border border-slate-800/80 backdrop-blur-md opacity-75 group-hover:opacity-100 transition-opacity">
+                <span
+                  className={`w-2 h-2 rounded-full transition-all ${
+                    isPlaying ? 'bg-emerald-400 shadow-[0_0_8px_#10B981]' : 'bg-slate-600'
+                  }`}
+                />
+                <span className="text-[10px] font-bold tracking-wider uppercase text-slate-300">
+                  MÁSTER
+                </span>
+                <span className="text-slate-600 text-[10px]">·</span>
+                <span className="text-[10px] font-mono text-cyan-300">
+                  {VISUALIZER_MODES_CONFIG.find((m) => m.mode === settings.mode)?.label || settings.mode}
+                </span>
+              </div>
+
+              {/* Sincronización en vivo con audio de pestaña/YouTube */}
+              <button
+                onClick={handleToggleTabAudioSync}
+                title={
+                  isTabAudioActive
+                    ? 'Audio en vivo sincronizado con los vídeos de YouTube (60 FPS FFT). Clic para desconectar.'
+                    : 'Sincronizar el audio real de los vídeos de YouTube en tiempo real con precisión de milisegundo (Loopback nativo).'
+                }
+                className={`px-2.5 py-1 rounded-xl text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer backdrop-blur-md shadow-lg ${
+                  isTabAudioActive
+                    ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-400/70 shadow-[0_0_12px_rgba(16,185,129,0.35)] animate-pulse'
+                    : 'bg-slate-950/80 text-cyan-300 hover:text-white hover:bg-slate-900 border border-cyan-500/40 hover:border-cyan-400'
                 }`}
-              />
-              <span className="text-[10px] font-bold tracking-wider uppercase text-slate-300">
-                MÁSTER
-              </span>
-              <span className="text-slate-600 text-[10px]">·</span>
-              <span className="text-[10px] font-mono text-cyan-300">
-                {VISUALIZER_MODES_CONFIG.find((m) => m.mode === settings.mode)?.label || settings.mode}
-              </span>
+              >
+                <Radio className={`w-3 h-3 shrink-0 ${isTabAudioActive ? 'text-emerald-400' : 'text-cyan-400'}`} />
+                <span>{isTabAudioActive ? 'EN VIVO 60 FPS (YouTube)' : '⚡ Sincronizar Audio en Vivo'}</span>
+              </button>
             </div>
 
             {/* If lateral panel is collapsed, show quick toggle button */}

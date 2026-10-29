@@ -53,6 +53,8 @@ class AudioEngine {
   private mediaDest: MediaStreamAudioDestinationNode | null = null;
   private mediaRecorder: MediaRecorder | null = null;
   private recordedChunks: Blob[] = [];
+  private tabAudioStream: MediaStream | null = null;
+  private tabAudioSource: MediaStreamAudioSourceNode | null = null;
 
   public getAudioContext(): AudioContext {
     if (!this.ctx) {
@@ -335,6 +337,76 @@ class AudioEngine {
 
   public isEnginePlaying(): boolean {
     return this.isPlaying;
+  }
+
+  // Live real-time tab/YouTube loopback capture
+  // Captures the live mixed audio from this tab (including all YouTube iframes)
+  // and feeds raw physical PCM samples directly into masterAnalyser in real-time.
+  public async enableLiveTabAudioCapture(): Promise<boolean> {
+    const ctx = this.getAudioContext();
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: {
+          suppressLocalAudioPlayback: false,
+        } as any,
+      });
+
+      const audioTrack = stream.getAudioTracks()[0];
+      if (!audioTrack) {
+        stream.getTracks().forEach((t) => t.stop());
+        return false;
+      }
+
+      // Stop unused video track immediately to conserve GPU/CPU resources
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.stop();
+      }
+
+      this.disableLiveTabAudioCapture();
+
+      this.tabAudioStream = stream;
+      this.tabAudioSource = ctx.createMediaStreamSource(stream);
+
+      // Connect strictly to masterAnalyser (zero speaker echo, zero feedback)
+      if (this.masterAnalyser) {
+        this.tabAudioSource.connect(this.masterAnalyser);
+      }
+
+      audioTrack.onended = () => {
+        this.disableLiveTabAudioCapture();
+      };
+
+      window.dispatchEvent(new CustomEvent('tab_audio_capture_changed', { detail: { active: true } }));
+      return true;
+    } catch (err) {
+      console.warn('Tab audio capture cancelled or error:', err);
+      return false;
+    }
+  }
+
+  public disableLiveTabAudioCapture() {
+    if (this.tabAudioSource) {
+      try {
+        this.tabAudioSource.disconnect();
+      } catch (e) {}
+      this.tabAudioSource = null;
+    }
+    if (this.tabAudioStream) {
+      try {
+        this.tabAudioStream.getTracks().forEach((t) => t.stop());
+      } catch (e) {}
+      this.tabAudioStream = null;
+    }
+    window.dispatchEvent(new CustomEvent('tab_audio_capture_changed', { detail: { active: false } }));
+  }
+
+  public isLiveTabAudioActive(): boolean {
+    return !!(this.tabAudioSource && this.tabAudioStream && this.tabAudioStream.active);
   }
 
   public async startAll() {

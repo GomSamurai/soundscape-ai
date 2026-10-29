@@ -1,0 +1,7 @@
+{
+  "name": "AURA: Suite de Paisajes Sonoros & Mezclador Multimedia",
+  "description": "Suite profesional de entornos sonoros y paisajes acústicos en tiempo real con mezclador multicanal, motor de audio y video, sincronización en la nube e IA generativa.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

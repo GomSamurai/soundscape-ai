@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
   Play,
   Pause,
@@ -10,18 +10,30 @@ import {
   Moon,
   Timer,
   Sparkles,
-  Activity,
-  RotateCcw,
+  Shuffle,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  List,
+  Search,
+  Radio,
+  Cpu,
+  Check,
+  Pin,
 } from 'lucide-react';
 import { SoundscapeProject } from '../types/soundscape';
-import { VisualizerMode, VisualizerSettings } from '../types/visualizer';
-import {
-  COLOR_PALETTES,
-  VISUALIZER_MODES_CONFIG,
-  loadStoredSettings,
-  persistVisualizerSettings,
-} from '../constants/visualizerPresets';
 import { ButterchurnVisualizer } from './ButterchurnVisualizer';
+import { audioEngine } from '../services/audioEngine';
+import butterchurnPresets from 'butterchurn-presets';
+
+const getButterchurnPresets = () => {
+  const mod: any = butterchurnPresets;
+  if (mod && typeof mod.getPresets === 'function') return mod;
+  if (mod?.default && typeof mod.default.getPresets === 'function') return mod.default;
+  if (typeof (window as any).butterchurnPresets?.getPresets === 'function')
+    return (window as any).butterchurnPresets;
+  return mod?.default || mod;
+};
 
 interface ZenModeViewProps {
   project: SoundscapeProject;
@@ -52,44 +64,56 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
   const [currentTime, setCurrentTime] = useState<string>('');
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [showControls, setShowControls] = useState<boolean>(true);
-  const [isDynamicsOpen, setIsDynamicsOpen] = useState<boolean>(false);
+  const [isPinnedControls, setIsPinnedControls] = useState<boolean>(false);
   const hideControlsTimeout = useRef<number | null>(null);
 
-  // Synchronized visualizer settings
-  const [visualizerSettings, setVisualizerSettings] = useState<VisualizerSettings>(() =>
-    loadStoredSettings()
+  // Modern GPU Visualizer Preset State
+  const [currentPresetName, setCurrentPresetName] = useState<string>('');
+  const [presetsList, setPresetsList] = useState<string[]>([]);
+  const [autoCycle, setAutoCycle] = useState<boolean>(true);
+  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Live Tab Audio Capture State
+  const [isTabAudioActive, setIsTabAudioActive] = useState<boolean>(() =>
+    audioEngine.isLiveTabAudioActive()
   );
 
-  // Sync settings when modified externally
+  // Load Presets List for the Zen Preset Explorer
   useEffect(() => {
-    const handleSync = (e: any) => {
-      if (e.detail) {
-        setVisualizerSettings(e.detail);
-      }
-    };
-    window.addEventListener('visualizer_settings_changed', handleSync);
-    return () => window.removeEventListener('visualizer_settings_changed', handleSync);
+    try {
+      const presetsEngine = getButterchurnPresets();
+      const allPresets = presetsEngine?.getPresets ? presetsEngine.getPresets() : {};
+      const names = Object.keys(allPresets);
+      setPresetsList(names);
+    } catch (e) {
+      console.warn('Error cargando presets de MilkDrop en Zen:', e);
+    }
   }, []);
 
-  const updateVisualizerSettings = (updates: Partial<VisualizerSettings>) => {
-    setVisualizerSettings((prev) => {
-      const next = { ...prev, ...updates };
-      persistVisualizerSettings(next);
-      window.dispatchEvent(new CustomEvent('visualizer_settings_changed', { detail: next }));
-      return next;
-    });
-  };
+  // Listen to preset updates from ButterchurnVisualizer
+  useEffect(() => {
+    const handlePresetChange = (e: any) => {
+      if (e.detail?.name) {
+        setCurrentPresetName(e.detail.name);
+      }
+      if (e.detail?.autoCycle !== undefined) {
+        setAutoCycle(e.detail.autoCycle);
+      }
+    };
 
-  // Active palette lookup & cycling
-  const activePalette =
-    COLOR_PALETTES.find((p) => p.id === visualizerSettings.paletteId) || COLOR_PALETTES[0];
+    const handleTabAudioChange = (e: any) => {
+      setIsTabAudioActive(e.detail?.active ?? audioEngine.isLiveTabAudioActive());
+    };
 
-  const handleCyclePalette = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    const currentIndex = COLOR_PALETTES.findIndex((p) => p.id === visualizerSettings.paletteId);
-    const nextIndex = (currentIndex + 1) % COLOR_PALETTES.length;
-    updateVisualizerSettings({ paletteId: COLOR_PALETTES[nextIndex].id });
-  };
+    window.addEventListener('butterchurn_preset_changed', handlePresetChange);
+    window.addEventListener('tab_audio_capture_changed', handleTabAudioChange);
+
+    return () => {
+      window.removeEventListener('butterchurn_preset_changed', handlePresetChange);
+      window.removeEventListener('tab_audio_capture_changed', handleTabAudioChange);
+    };
+  }, []);
 
   // Clock
   useEffect(() => {
@@ -104,16 +128,17 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  // Idle hide controls after 3.5 seconds of mouse inactivity
+  // Idle hide controls after 4.2s of mouse inactivity (unless pinned)
   const resetHideTimer = () => {
     setShowControls(true);
     if (hideControlsTimeout.current) clearTimeout(hideControlsTimeout.current);
-    hideControlsTimeout.current = window.setTimeout(() => {
-      // Don't auto-hide if user is actively tweaking dynamics sliders
-      if (!isDynamicsOpen) {
-        setShowControls(false);
-      }
-    }, 3800);
+    if (!isPinnedControls) {
+      hideControlsTimeout.current = window.setTimeout(() => {
+        if (!isSearchOpen) {
+          setShowControls(false);
+        }
+      }, 4200);
+    }
   };
 
   useEffect(() => {
@@ -123,7 +148,7 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
       window.removeEventListener('mousemove', resetHideTimer);
       if (hideControlsTimeout.current) clearTimeout(hideControlsTimeout.current);
     };
-  }, [isDynamicsOpen]);
+  }, [isSearchOpen, isPinnedControls]);
 
   // Fullscreen helper
   const toggleFullscreen = () => {
@@ -136,15 +161,96 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
     }
   };
 
+  useEffect(() => {
+    const onFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  // Preset Navigation Dispatchers (talk to Butterchurn GPU engine)
+  const handleNextPreset = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    window.dispatchEvent(new CustomEvent('butterchurn_next_preset'));
+  };
+
+  const handlePrevPreset = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    window.dispatchEvent(new CustomEvent('butterchurn_prev_preset'));
+  };
+
+  const handleRandomPreset = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    window.dispatchEvent(new CustomEvent('butterchurn_random_preset'));
+  };
+
+  const handleToggleAutoCycle = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    window.dispatchEvent(new CustomEvent('butterchurn_toggle_autocycle'));
+    setAutoCycle((v) => !v);
+  };
+
+  const handleSelectPreset = (name: string) => {
+    window.dispatchEvent(
+      new CustomEvent('butterchurn_select_preset', { detail: { name, blend: 2.0 } })
+    );
+    setCurrentPresetName(name);
+    setIsSearchOpen(false);
+  };
+
+  const handleToggleTabAudio = async (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (isTabAudioActive) {
+      audioEngine.disableLiveTabAudioCapture();
+    } else {
+      await audioEngine.enableLiveTabAudioCapture();
+    }
+  };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isSearchOpen) return;
+      if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        onTogglePlay();
+      } else if (e.key === 'Escape') {
+        onExitZen();
+      } else if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'n') {
+        handleNextPreset();
+      } else if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'p') {
+        handlePrevPreset();
+      } else if (e.key.toLowerCase() === 'r') {
+        handleRandomPreset();
+      } else if (e.key.toLowerCase() === 'f') {
+        toggleFullscreen();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isSearchOpen, onTogglePlay, onExitZen]);
+
   const formatRemaining = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Filter presets for search modal
+  const filteredPresets = useMemo(() => {
+    if (!searchQuery.trim()) return presetsList.slice(0, 80);
+    const q = searchQuery.toLowerCase();
+    return presetsList.filter((p) => p.toLowerCase().includes(q)).slice(0, 100);
+  }, [presetsList, searchQuery]);
+
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950 text-slate-100 flex flex-col justify-between overflow-hidden select-none animate-fade-in">
-      {/* Living Master Visualizer GPU Background (Fullscreen & Dynamic) */}
+    <div
+      onMouseMove={resetHideTimer}
+      onClick={resetHideTimer}
+      className="fixed inset-0 z-50 bg-slate-950 text-slate-100 flex flex-col justify-between overflow-hidden select-none animate-fade-in"
+    >
+      {/* Living Master Visualizer GPU Background (Fullscreen & Dynamic WebGL) */}
       <div className="absolute inset-0">
         <ButterchurnVisualizer
           isPlaying={isPlaying}
@@ -152,6 +258,7 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
           tracks={project.channels}
           isZenMode={true}
           onExitZen={onExitZen}
+          showInternalHud={false}
         />
       </div>
 
@@ -161,69 +268,108 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
           showControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
         }`}
       >
-        {/* Left: Sanctuary Brand & Project Name */}
-        <div className="flex items-center gap-2.5 pointer-events-auto bg-slate-950/70 border border-slate-800/80 backdrop-blur-xl px-3 py-1.5 rounded-2xl shadow-xl">
-          <span className="p-1.5 rounded-xl bg-cyan-950/70 border border-cyan-500/40 text-cyan-400">
+        {/* Left: Sanctuary Brand & GPU MilkDrop Status */}
+        <div className="flex items-center gap-2.5 pointer-events-auto bg-slate-950/85 border border-slate-800/80 backdrop-blur-2xl px-3.5 py-2 rounded-2xl shadow-2xl">
+          <span className="p-1.5 rounded-xl bg-cyan-950/80 border border-cyan-500/40 text-cyan-400">
             <Sparkles className="w-3.5 h-3.5 animate-pulse" />
           </span>
-          <div>
-            <h1 className="text-[11px] sm:text-xs font-bold uppercase tracking-widest text-slate-200">
-              Santuario Acústico
-            </h1>
-            <p className="text-[10px] text-cyan-300 font-medium truncate max-w-[140px] sm:max-w-xs">
-              {project.name}
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2">
+              <h1 className="text-[11px] sm:text-xs font-bold uppercase tracking-widest text-slate-100">
+                Santuario Zen
+              </h1>
+              <span className="px-1.5 py-0.2 rounded-md bg-cyan-950/90 text-[10px] text-cyan-300 font-mono border border-cyan-500/40 flex items-center gap-1">
+                <Cpu className="w-2.5 h-2.5 text-cyan-400" />
+                Nvidia GPU
+              </span>
+            </div>
+            <p
+              className="text-[10px] text-slate-400 font-mono truncate max-w-[150px] sm:max-w-xs"
+              title={currentPresetName}
+            >
+              {currentPresetName.replace(/_/g, ' ') || project.name}
             </p>
           </div>
         </div>
 
-        {/* Center: ALL 10 Visualizer Styles Direct Selector */}
-        <div className="flex items-center gap-1 pointer-events-auto bg-slate-950/80 border border-slate-800/80 backdrop-blur-xl p-1 rounded-2xl shadow-2xl overflow-x-auto no-scrollbar max-w-[calc(100vw-32px)] sm:max-w-none">
-          {VISUALIZER_MODES_CONFIG.map((item) => {
-            const Icon = item.icon;
-            const isActive = visualizerSettings.mode === item.mode;
-            return (
-              <button
-                key={item.mode}
-                onClick={() => updateVisualizerSettings({ mode: item.mode })}
-                title={`${item.label}: ${item.desc}`}
-                className={`px-2.5 py-1 text-[11px] font-semibold rounded-xl flex items-center gap-1.5 transition-all shrink-0 cursor-pointer ${
-                  isActive
-                    ? 'bg-cyan-500/25 text-cyan-200 border border-cyan-400/60 shadow-[0_0_12px_rgba(6,182,212,0.4)]'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-900/60 border border-transparent'
-                }`}
-              >
-                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-cyan-300' : 'text-slate-400'}`} />
-                <span className="hidden md:inline">{item.label}</span>
-                <span className="md:hidden">{item.shortLabel}</span>
-              </button>
-            );
-          })}
+        {/* Center: MilkDrop 2 GPU Preset Controls Toolbar */}
+        <div className="flex items-center gap-1 pointer-events-auto bg-slate-950/85 border border-slate-800/80 backdrop-blur-2xl px-2 py-1.5 rounded-2xl shadow-2xl">
+          <button
+            onClick={handlePrevPreset}
+            title="Preset anterior (Flecha Izquierda / P)"
+            className="p-1.5 hover:bg-slate-800/80 text-slate-300 hover:text-white rounded-xl transition-colors cursor-pointer"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleRandomPreset}
+            title="Preset aleatorio (R / Shuffle)"
+            className="p-1.5 hover:bg-slate-800/80 text-cyan-400 hover:text-cyan-200 rounded-xl transition-colors cursor-pointer"
+          >
+            <Shuffle className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={handleNextPreset}
+            title="Siguiente preset (Flecha Derecha / N)"
+            className="p-1.5 hover:bg-slate-800/80 text-slate-300 hover:text-white rounded-xl transition-colors cursor-pointer"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          <span className="w-px h-4 bg-slate-800 mx-1" />
+          <button
+            onClick={handleToggleAutoCycle}
+            title={autoCycle ? 'Auto-cambio activo cada 20s' : 'Auto-cambio desactivado'}
+            className={`p-1.5 rounded-xl transition-colors cursor-pointer flex items-center gap-1 text-xs ${
+              autoCycle ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400 hover:bg-slate-800/80'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span className="text-[10px] font-mono hidden md:inline">20s</span>
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsSearchOpen(true);
+            }}
+            title="Explorar biblioteca de presets de MilkDrop"
+            className="p-1.5 hover:bg-slate-800/80 text-slate-300 hover:text-white rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 text-xs"
+          >
+            <List className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="text-[11px] font-medium hidden sm:inline">Presets</span>
+          </button>
         </div>
 
-        {/* Right Tools: Palette Cycler, Timer Badge, Fullscreen & Exit */}
+        {/* Right Tools: Tab Audio Sync, Timer, Fullscreen & Exit */}
         <div className="flex items-center gap-2 pointer-events-auto">
-          {/* Palette Cycler Pill */}
+          {/* Live Tab Audio Capture (YouTube In-Sync) Button */}
           <button
-            onClick={handleCyclePalette}
-            title={`Paleta de Color: ${activePalette.name} (Clic para cambiar)`}
-            className="px-2.5 py-1.5 rounded-xl bg-slate-950/80 hover:bg-slate-900 border border-slate-800/80 hover:border-cyan-500/50 text-slate-300 text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-lg backdrop-blur-xl"
+            onClick={handleToggleTabAudio}
+            title={
+              isTabAudioActive
+                ? 'Audio de YouTube sincronizado en vivo (1:1). Clic para desactivar.'
+                : 'Sincronizar el audio real de los videos de YouTube de esta pestaña con 1 clic'
+            }
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold backdrop-blur-2xl transition-all cursor-pointer shadow-lg border ${
+              isTabAudioActive
+                ? 'bg-emerald-950/90 border-emerald-500 text-emerald-300 shadow-emerald-500/20 animate-pulse'
+                : 'bg-slate-950/85 border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/60 hover:border-cyan-400'
+            }`}
           >
-            <span
-              className="w-2.5 h-2.5 rounded-full shadow-sm"
-              style={{
-                backgroundColor: activePalette.primary,
-                boxShadow: `0 0 8px ${activePalette.glow}`,
-              }}
+            <Radio
+              className={`w-3.5 h-3.5 ${
+                isTabAudioActive ? 'text-emerald-400 animate-spin' : 'text-cyan-400'
+              }`}
             />
-            <span className="hidden lg:inline">{activePalette.name}</span>
-            <RotateCcw className="w-3 h-3 text-slate-400 hover:text-white" />
+            <span className="text-[11px] hidden sm:inline">
+              {isTabAudioActive ? 'YouTube 1:1' : '⚡ Audio en Vivo'}
+            </span>
           </button>
 
           {/* Active Timer Pill */}
           {activeTimer?.isActive && (
             <button
               onClick={onOpenTimerModal}
-              className="px-3 py-1.5 rounded-xl bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 text-xs font-mono font-semibold flex items-center gap-2 hover:bg-indigo-900/80 transition-colors cursor-pointer shadow-lg backdrop-blur-xl"
+              className="px-3 py-1.5 rounded-xl bg-indigo-950/85 border border-indigo-500/40 text-indigo-300 text-xs font-mono font-semibold flex items-center gap-2 hover:bg-indigo-900/80 transition-colors cursor-pointer shadow-lg backdrop-blur-2xl"
               title="Ajustar temporizador de apagado o pomodoro"
             >
               <Moon className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
@@ -231,11 +377,24 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
             </button>
           )}
 
+          {/* Pin Controls Toggle */}
+          <button
+            onClick={() => setIsPinnedControls(!isPinnedControls)}
+            className={`p-2 rounded-xl border transition-colors cursor-pointer shadow-lg backdrop-blur-2xl ${
+              isPinnedControls
+                ? 'bg-cyan-950/90 border-cyan-500/60 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
+                : 'bg-slate-950/85 hover:bg-slate-900 border-slate-800/80 text-slate-400 hover:text-white'
+            }`}
+            title={isPinnedControls ? 'Controles fijados (visibles siempre)' : 'Fijar controles en pantalla'}
+          >
+            <Pin className="w-4 h-4" />
+          </button>
+
           {/* Fullscreen Button */}
           <button
             onClick={toggleFullscreen}
-            className="p-2 rounded-xl bg-slate-950/80 hover:bg-slate-900 border border-slate-800/80 text-slate-300 hover:text-white transition-colors cursor-pointer shadow-lg backdrop-blur-xl"
-            title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+            className="p-2 rounded-xl bg-slate-950/85 hover:bg-slate-900 border border-slate-800/80 text-slate-300 hover:text-white transition-colors cursor-pointer shadow-lg backdrop-blur-2xl"
+            title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa (F)'}
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
@@ -243,7 +402,7 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
           {/* Exit Zen Button */}
           <button
             onClick={onExitZen}
-            className="px-3 py-1.5 rounded-xl bg-slate-950/80 hover:bg-rose-950 border border-slate-800/80 hover:border-rose-500/50 text-slate-300 hover:text-rose-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-lg backdrop-blur-xl"
+            className="px-3 py-1.5 rounded-xl bg-slate-950/85 hover:bg-rose-950 border border-slate-800/80 hover:border-rose-500/50 text-slate-300 hover:text-rose-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-lg backdrop-blur-2xl"
             title="Volver a la consola de mezcla (Esc)"
           >
             <X className="w-4 h-4" />
@@ -252,7 +411,7 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
         </div>
       </div>
 
-      {/* Center Minimalist Clock & Aura (Unobtrusive) */}
+      {/* Center Minimalist Clock & Project Aura */}
       <div className="relative z-10 flex flex-col items-center justify-center text-center px-4 space-y-2 pointer-events-none">
         <div className="text-6xl sm:text-8xl font-extralight tracking-tight font-mono text-white/90 drop-shadow-[0_4px_24px_rgba(0,0,0,0.85)]">
           {currentTime}
@@ -268,7 +427,7 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
 
         {activeTimer?.isActive && (
           <div className="pt-2">
-            <span className="px-3.5 py-1 rounded-full bg-slate-950/70 border border-indigo-500/40 text-xs text-indigo-300 font-mono shadow-md backdrop-blur-md">
+            <span className="px-3.5 py-1 rounded-full bg-slate-950/80 border border-indigo-500/40 text-xs text-indigo-300 font-mono shadow-md backdrop-blur-md">
               {activeTimer.mode === 'sleep' ? '🌙 Apagado gradual en ' : '🔥 Ciclo Pomodoro en '}
               {formatRemaining(activeTimer.remainingSeconds)}
             </span>
@@ -278,7 +437,7 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
 
       {/* Floating Glassmorphism Bottom Dock */}
       <div
-        className={`relative z-20 flex items-center justify-center p-4 sm:p-6 transition-all duration-500 pointer-events-none ${
+        className={`relative z-20 flex flex-col items-center justify-center p-4 sm:p-6 transition-all duration-500 pointer-events-none ${
           showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
         }`}
       >
@@ -289,7 +448,7 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
             className={`w-11 h-11 rounded-xl flex items-center justify-center text-slate-950 transition-all cursor-pointer shadow-lg active:scale-95 ${
               isPlaying ? 'bg-amber-400 hover:bg-amber-300' : 'bg-emerald-500 hover:bg-emerald-400'
             }`}
-            title={isPlaying ? 'Pausar audio' : 'Reproducir audio'}
+            title={isPlaying ? 'Pausar audio (Espacio)' : 'Reproducir audio (Espacio)'}
           >
             {isPlaying ? (
               <Pause className="w-5 h-5 fill-current" />
@@ -305,7 +464,11 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
               className="text-slate-400 hover:text-white transition-colors cursor-pointer"
               title={masterVolume > 0 ? 'Silenciar master' : 'Restaurar volumen'}
             >
-              {masterVolume > 0 ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4 text-rose-400" />}
+              {masterVolume > 0 ? (
+                <Volume2 className="w-4 h-4" />
+              ) : (
+                <VolumeX className="w-4 h-4 text-rose-400" />
+              )}
             </button>
             <input
               type="range"
@@ -324,76 +487,14 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
 
           <div className="h-6 w-px bg-slate-800" />
 
-          {/* Quick Visualizer Dynamics Adjuster (Sensibilidad & Suavizado) */}
-          <div className="relative">
-            <button
-              onClick={() => setIsDynamicsOpen((v) => !v)}
-              title="Ajustar Sensibilidad y Suavizado del Visualizador"
-              className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${
-                isDynamicsOpen
-                  ? 'bg-cyan-950 border-cyan-500 text-cyan-300'
-                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-              }`}
-            >
-              <Activity className="w-4 h-4 text-cyan-400" />
-              <span className="text-xs font-mono hidden sm:inline">
-                {visualizerSettings.gain.toFixed(2)}x
-              </span>
-            </button>
-
-            {/* Floating Popover with Sliders */}
-            {isDynamicsOpen && (
-              <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 w-60 p-3.5 rounded-2xl bg-slate-900/95 border border-cyan-500/40 shadow-2xl backdrop-blur-2xl z-30 space-y-3 animate-fade-in">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-200 border-b border-slate-800 pb-1.5">
-                  <span>Dinámica Visual Zen</span>
-                  <button
-                    onClick={() => setIsDynamicsOpen(false)}
-                    className="text-slate-400 hover:text-white cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[11px] text-slate-300">
-                    <span>Sensibilidad</span>
-                    <span className="font-mono text-cyan-400 font-bold">
-                      {visualizerSettings.gain.toFixed(2)}x
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0.2"
-                    max="2.5"
-                    step="0.05"
-                    value={visualizerSettings.gain}
-                    onChange={(e) => updateVisualizerSettings({ gain: parseFloat(e.target.value) })}
-                    className="w-full accent-cyan-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[11px] text-slate-300">
-                    <span>Suavizado Anti-Tembleque</span>
-                    <span className="font-mono text-cyan-400 font-bold">
-                      {Math.round((visualizerSettings.smoothing ?? 0.82) * 100)}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0.4"
-                    max="0.96"
-                    step="0.02"
-                    value={visualizerSettings.smoothing ?? 0.82}
-                    onChange={(e) =>
-                      updateVisualizerSettings({ smoothing: parseFloat(e.target.value) })
-                    }
-                    className="w-full accent-cyan-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Quick Random Preset button */}
+          <button
+            onClick={handleRandomPreset}
+            title="Cambiar preset aleatorio (R)"
+            className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-cyan-400 hover:text-cyan-200 hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            <Shuffle className="w-4 h-4" />
+          </button>
 
           {/* Sleep / Pomodoro Timer Launcher */}
           <button
@@ -408,7 +509,73 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
             <Timer className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Subtle Micro-hint */}
+        <p className="text-[10px] text-slate-500 mt-2 pointer-events-auto">
+          Clic en el fondo para cambiar preset · Espacio: Pausa · Esc: Salir
+        </p>
       </div>
+
+      {/* Preset Explorer / Search Modal inside Zen Mode */}
+      {isSearchOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl p-4 sm:p-8 flex flex-col justify-center items-center animate-fade-in"
+          onClick={() => setIsSearchOpen(false)}
+        >
+          <div
+            className="w-full max-w-xl max-h-[80vh] bg-slate-900 border border-slate-800 rounded-3xl p-5 flex flex-col shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-cyan-400" />
+                <h3 className="text-sm font-bold text-slate-100">
+                  Biblioteca de Presets MilkDrop 2 (GPU)
+                </h3>
+                <span className="text-xs text-slate-400">({presetsList.length})</span>
+              </div>
+              <button
+                onClick={() => setIsSearchOpen(false)}
+                className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="relative my-3">
+              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Buscar preset (ej: geiss, cosmic, flexi, wave, plasma, tunnel)..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-1 pr-1 custom-scrollbar max-h-[50vh]">
+              {filteredPresets.map((name) => {
+                const isSelected = name === currentPresetName;
+                return (
+                  <button
+                    key={name}
+                    onClick={() => handleSelectPreset(name)}
+                    className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-cyan-950/90 text-cyan-300 font-semibold border border-cyan-500/50'
+                        : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                    }`}
+                  >
+                    <span className="font-mono truncate">{name.replace(/_/g, ' ')}</span>
+                    {isSelected && <Check className="w-4 h-4 text-cyan-400 shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

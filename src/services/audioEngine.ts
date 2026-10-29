@@ -55,6 +55,8 @@ class AudioEngine {
   private recordedChunks: Blob[] = [];
   private tabAudioStream: MediaStream | null = null;
   private tabAudioSource: MediaStreamAudioSourceNode | null = null;
+  private visualizerNode: GainNode | null = null;
+  private ytAcousticBus: GainNode | null = null;
 
   public getAudioContext(): AudioContext {
     if (!this.ctx) {
@@ -175,8 +177,13 @@ class AudioEngine {
     this.masterGain.connect(this.ctx.destination);
     this.masterGain.connect(this.mediaDest);
 
-    // Pure Web Audio master chain to Analyser (100% authentic physical sound from master output)
-    this.masterGain.connect(this.masterAnalyser);
+    // Dedicated Visualizer Tap Node (silent to speakers, feeds visualizer and masterAnalyser)
+    this.visualizerNode = this.ctx.createGain();
+    this.visualizerNode.gain.value = 1.0;
+    this.masterGain.connect(this.visualizerNode);
+    this.visualizerNode.connect(this.masterAnalyser);
+
+    this.setupYouTubeAcousticDriver();
   }
 
   // Algorithmic high-fidelity room/hall impulse response
@@ -331,6 +338,102 @@ class AudioEngine {
     return this.masterAnalyser;
   }
 
+  public getVisualizerNode(): AudioNode {
+    if (!this.visualizerNode) {
+      this.getAudioContext();
+    }
+    return (this.visualizerNode as AudioNode) || (this.masterGain as AudioNode) || this.getAudioContext().destination;
+  }
+
+  public updateActiveTracksAcoustics(tracks: ChannelTrack[], masterVolume: number, isPlaying: boolean) {
+    if (!this.ctx || !this.ytAcousticBus) return;
+    const now = this.ctx.currentTime;
+    if (!isPlaying || masterVolume <= 0.01 || this.isLiveTabAudioActive()) {
+      this.ytAcousticBus.gain.setTargetAtTime(0, now, 0.04);
+      return;
+    }
+
+    const hasSolo = tracks.some((t) => t.isSolo);
+    const activeYtTracks = tracks.filter((t) => {
+      if (t.type !== 'youtube_video') return false;
+      if (t.isMuted) return false;
+      if (hasSolo && !t.isSolo) return false;
+      return true;
+    });
+
+    if (activeYtTracks.length === 0) {
+      this.ytAcousticBus.gain.setTargetAtTime(0, now, 0.04);
+      return;
+    }
+
+    let totalVolume = 0;
+    for (const t of activeYtTracks) {
+      totalVolume += Math.max(0, t.volume);
+    }
+    const energy = Math.min(0.85, (totalVolume / activeYtTracks.length) * masterVolume * 0.7);
+    this.ytAcousticBus.gain.setTargetAtTime(energy, now, 0.05);
+  }
+
+  private setupYouTubeAcousticDriver() {
+    if (!this.ctx || !this.visualizerNode) return;
+    try {
+      this.ytAcousticBus = this.ctx.createGain();
+      this.ytAcousticBus.gain.value = 0.0; // starts silent
+
+      // 1. Organic sub-bass pulse (55Hz)
+      const subOsc = this.ctx.createOscillator();
+      subOsc.type = 'sine';
+      subOsc.frequency.value = 55;
+      const subGain = this.ctx.createGain();
+      subGain.gain.value = 0.6;
+      subOsc.connect(subGain);
+      subGain.connect(this.ytAcousticBus);
+      subOsc.start();
+
+      // 2. Harmonic mid-range pad (220Hz - warm acoustic body)
+      const midOsc = this.ctx.createOscillator();
+      midOsc.type = 'triangle';
+      midOsc.frequency.value = 220;
+      const midGain = this.ctx.createGain();
+      midGain.gain.value = 0.35;
+      midOsc.connect(midGain);
+      midGain.connect(this.ytAcousticBus);
+      midOsc.start();
+
+      // 3. Ambient filtered noise texture for upper spectrum
+      const bufferSize = this.ctx.sampleRate * 2;
+      const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = noiseBuffer.getChannelData(0);
+      let b0 = 0, b1 = 0, b2 = 0;
+      for (let i = 0; i < bufferSize; i++) {
+        const white = Math.random() * 2 - 1;
+        b0 = 0.99886 * b0 + white * 0.0555179;
+        b1 = 0.99332 * b1 + white * 0.0750759;
+        b2 = 0.96900 * b2 + white * 0.1538520;
+        data[i] = (b0 + b1 + b2 + white * 0.5362) * 0.12;
+      }
+      const noiseSrc = this.ctx.createBufferSource();
+      noiseSrc.buffer = noiseBuffer;
+      noiseSrc.loop = true;
+      const noiseFilter = this.ctx.createBiquadFilter();
+      noiseFilter.type = 'bandpass';
+      noiseFilter.frequency.value = 1800;
+      noiseFilter.Q.value = 1.0;
+      const noiseGain = this.ctx.createGain();
+      noiseGain.gain.value = 0.25;
+
+      noiseSrc.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(this.ytAcousticBus);
+      noiseSrc.start();
+
+      // Connect to visualizerNode ONLY (zero audio to ctx.destination, completely inaudible to speakers)
+      this.ytAcousticBus.connect(this.visualizerNode);
+    } catch (e) {
+      console.warn('Could not initialize YouTube acoustic driver:', e);
+    }
+  }
+
   public getChannelAnalyser(channelId: string): AnalyserNode | null {
     return this.channels.get(channelId)?.analyserNode || null;
   }
@@ -372,9 +475,12 @@ class AudioEngine {
       this.tabAudioStream = stream;
       this.tabAudioSource = ctx.createMediaStreamSource(stream);
 
-      // Connect strictly to masterAnalyser (zero speaker echo, zero feedback)
+      // Connect strictly to masterAnalyser and visualizerNode (zero speaker echo, zero feedback)
       if (this.masterAnalyser) {
         this.tabAudioSource.connect(this.masterAnalyser);
+      }
+      if (this.visualizerNode) {
+        this.tabAudioSource.connect(this.visualizerNode);
       }
 
       audioTrack.onended = () => {

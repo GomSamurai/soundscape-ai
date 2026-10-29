@@ -6,7 +6,7 @@ import { youtubeManager } from './services/youtubeManager';
 import { CloudStorageService } from './services/cloudStorage';
 import { ShareService } from './services/shareService';
 import { TopBar } from './components/TopBar';
-import { MasterVisualizer } from './components/MasterVisualizer';
+import { ButterchurnVisualizer } from './components/ButterchurnVisualizer';
 import { ChannelStrip } from './components/ChannelStrip';
 import { MasterStrip } from './components/MasterStrip';
 import { PresetsBar } from './components/PresetsBar';
@@ -835,14 +835,12 @@ export default function App() {
           </div>
         )}
 
-        {/* Master Real-time Living Acoustic Visualizer Ribbon */}
+        {/* Master Real-time GPU WebGL MilkDrop Visualizer */}
         {currentView !== 'zen' && (
-          <section aria-label="Visualizador Acústico Maestro">
-            <MasterVisualizer
-              themeColor={activeColor}
+          <section aria-label="Visualizador Acústico GPU Nvidia MilkDrop Maestro">
+            <ButterchurnVisualizer
               isPlaying={isPlaying}
               masterVolume={activeProject.masterVolume}
-              masterFilter={activeProject.masterFilter}
               tracks={activeProject.channels}
             />
           </section>

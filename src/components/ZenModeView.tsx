@@ -21,7 +21,7 @@ import {
   loadStoredSettings,
   persistVisualizerSettings,
 } from '../constants/visualizerPresets';
-import { MasterVisualizer } from './MasterVisualizer';
+import { ButterchurnVisualizer } from './ButterchurnVisualizer';
 
 interface ZenModeViewProps {
   project: SoundscapeProject;
@@ -144,9 +144,9 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950 text-slate-100 flex flex-col justify-between overflow-hidden select-none animate-fade-in">
-      {/* Living Master Visualizer Canvas Background (Fullscreen & Dynamic) */}
-      <div className="absolute inset-0 pointer-events-none">
-        <MasterVisualizer
+      {/* Living Master Visualizer GPU Background (Fullscreen & Dynamic) */}
+      <div className="absolute inset-0">
+        <ButterchurnVisualizer
           isPlaying={isPlaying}
           masterVolume={masterVolume}
           tracks={project.channels}

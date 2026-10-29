@@ -68,10 +68,11 @@ export const MultiVideoGrid: React.FC<MultiVideoGridProps> = ({
       }
 
       if (newVideoId) {
+        const safeTitle = (newTitle || cleanName || 'Video Verificado').trim();
         onUpdateTrack(track.id, {
           youtubeVideoId: newVideoId,
           youtubeThumbnail: newThumb || `https://img.youtube.com/vi/${newVideoId}/hqdefault.jpg`,
-          name: `${newTitle.slice(0, 32)} (Actualizado)`,
+          name: `${safeTitle.slice(0, 30)} (Actualizado)`,
           isUnavailable: false,
         });
       }

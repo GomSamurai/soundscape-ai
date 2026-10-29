@@ -11,7 +11,6 @@ import {
 import { RotaryKnob } from './RotaryKnob';
 import { StudioFader } from './StudioFader';
 import { audioEngine } from '../services/audioEngine';
-import { YouTubePlayerEmbed } from './YouTubePlayerEmbed';
 import { VerifiedVideoLibrary } from '../services/verifiedVideoLibrary';
 import {
   Trash2,
@@ -293,11 +292,12 @@ export const ChannelStrip: React.FC<ChannelStripProps> = ({
       }
 
       if (newVideoId) {
+        const safeTitle = (newTitle || cleanName || 'Video Verificado').trim();
         onUpdate({
           type: 'youtube_video',
           youtubeVideoId: newVideoId,
           youtubeThumbnail: newThumb || `https://img.youtube.com/vi/${newVideoId}/hqdefault.jpg`,
-          name: `${newTitle.slice(0, 26)}`,
+          name: safeTitle.slice(0, 28),
           isUnavailable: false,
         });
         setHasVideoError(false);

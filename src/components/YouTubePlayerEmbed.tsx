@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { youtubeManager } from '../services/youtubeManager';
 import { AlertCircle, ExternalLink, RefreshCw, Search } from 'lucide-react';
 
@@ -33,7 +33,7 @@ export const YouTubePlayerEmbed: React.FC<YouTubePlayerEmbedProps> = ({
   onOpenReplace,
   onErrorChange,
 }) => {
-  const containerId = `yt-player-${trackId}-${videoId}`;
+  const mountHostRef = useRef<HTMLDivElement>(null);
   const [hasError, setHasError] = useState(false);
   const [errorCode, setErrorCode] = useState<number | null>(null);
   const [isAutoReplacing, setIsAutoReplacing] = useState(false);
@@ -42,6 +42,20 @@ export const YouTubePlayerEmbed: React.FC<YouTubePlayerEmbedProps> = ({
     setHasError(false);
     setErrorCode(null);
     onErrorChange?.(false, null);
+
+    const host = mountHostRef.current;
+    if (!host) return;
+
+    // Safely clear any existing DOM elements inserted by third-party YouTube API
+    // This Container Shield ensures React never diffs or calls removeChild on YouTube's iframe
+    host.innerHTML = '';
+
+    // Create an unmanaged DOM node that React does not manage
+    const playerDiv = document.createElement('div');
+    const containerId = `yt-player-${trackId}-${Math.random().toString(36).substring(2, 9)}`;
+    playerDiv.id = containerId;
+    playerDiv.className = 'w-full h-full aspect-video';
+    host.appendChild(playerDiv);
 
     youtubeManager.registerPlayer(
       trackId,
@@ -62,8 +76,13 @@ export const YouTubePlayerEmbed: React.FC<YouTubePlayerEmbedProps> = ({
 
     return () => {
       youtubeManager.unregisterPlayer(trackId);
+      if (host) {
+        try {
+          host.innerHTML = '';
+        } catch (e) {}
+      }
     };
-  }, [trackId, videoId, containerId]);
+  }, [trackId, videoId]);
 
   // Volume & mute dynamic synchronization
   useEffect(() => {
@@ -85,6 +104,8 @@ export const YouTubePlayerEmbed: React.FC<YouTubePlayerEmbedProps> = ({
     setHasError(false); // Optimistically clear error while replacement loads
     try {
       await onAutoReplace();
+    } catch (err) {
+      console.warn('Error in onAutoReplace:', err);
     } finally {
       setIsAutoReplacing(false);
     }
@@ -98,7 +119,8 @@ export const YouTubePlayerEmbed: React.FC<YouTubePlayerEmbedProps> = ({
           : 'fixed bottom-1 right-1 w-[200px] h-[120px] opacity-[0.01] pointer-events-none z-0 overflow-hidden'
       }`}
     >
-      <div key={`${trackId}-${videoId}`} id={containerId} className="w-full h-full aspect-video" />
+      {/* Container Shield: React manages only this host div. YouTube replaces internal elements safely via vanilla DOM */}
+      <div ref={mountHostRef} className="w-full h-full aspect-video" />
 
       {/* Graceful Error Fallback Overlay if YouTube blocks embedding */}
       {hasError && visible && (

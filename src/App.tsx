@@ -20,6 +20,7 @@ import { GeminiSettingsModal } from './components/GeminiSettingsModal';
 import { SleepTimerModal, TimerConfig } from './components/SleepTimerModal';
 import { ZenModeView } from './components/ZenModeView';
 import { YouTubePlayerEmbed } from './components/YouTubePlayerEmbed';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { VerifiedVideoLibrary } from './services/verifiedVideoLibrary';
 import { GeminiKeyService } from './services/geminiKeyService';
 import {
@@ -1070,25 +1071,27 @@ export default function App() {
                       </div>
                     ) : (
                       <>
-                        {activeProject.channels
-                          .filter((track) => {
-                            const b = activeProject.buses?.find((bus) => bus.id === track.busId);
-                            return !b?.collapsed;
-                          })
-                          .map((track, idx) => (
-                            <ChannelStrip
-                              key={track.id}
-                              track={track}
-                              trackIndex={idx + 1}
-                              masterVolume={activeProject.masterVolume}
-                              hasAnySolo={hasAnySolo}
-                              isPlaying={isPlaying}
-                              buses={activeProject.buses}
-                              onUpdate={(updated) => handleUpdateChannel(track.id, updated)}
-                              onRemove={() => handleRemoveChannel(track.id)}
-                              onOpenReplace={handleOpenReplace}
-                            />
-                          ))}
+                        <ErrorBoundary fallbackTitle="Canales de la Consola">
+                          {activeProject.channels
+                            .filter((track) => {
+                              const b = activeProject.buses?.find((bus) => bus.id === track.busId);
+                              return !b?.collapsed;
+                            })
+                            .map((track, idx) => (
+                              <ChannelStrip
+                                key={track.id}
+                                track={track}
+                                trackIndex={idx + 1}
+                                masterVolume={activeProject.masterVolume}
+                                hasAnySolo={hasAnySolo}
+                                isPlaying={isPlaying}
+                                buses={activeProject.buses}
+                                onUpdate={(updated) => handleUpdateChannel(track.id, updated)}
+                                onRemove={() => handleRemoveChannel(track.id)}
+                                onOpenReplace={handleOpenReplace}
+                              />
+                            ))}
+                        </ErrorBoundary>
 
                         {/* Botón + Añadir Canal */}
                         <div className="w-56 sm:w-60 md:w-64 shrink-0 rounded-2xl border-2 border-dashed border-slate-800 hover:border-cyan-500/60 bg-slate-900/40 hover:bg-slate-900/70 transition-all p-3 flex flex-col items-center justify-center text-center group shadow-lg min-h-[280px]">
@@ -1202,52 +1205,55 @@ export default function App() {
 
       {/* Global Persistent YouTube Audio Layer (Mounted in mixer and zen so YouTube playback never stops) */}
       <div className="fixed -left-[9999px] -top-[9999px] w-1 h-1 pointer-events-none opacity-0 overflow-hidden" aria-hidden="true">
-        {currentView !== 'multi_video' &&
-          activeProject.channels
-            .filter((t) => t.type === 'youtube_video' && t.youtubeVideoId)
-            .map((track) => {
-            const assignedBus = activeProject.buses?.find((b) => b.id === track.busId);
-            const isBusMuted = assignedBus?.muted || false;
-            const hasAnyBusSolo = activeProject.buses?.some((b) => b.solo) || false;
-            const isBusSoloBlocked = hasAnyBusSolo && !assignedBus?.solo && !track.solo;
-            const isTrackSoloBlocked = hasAnySolo && !track.solo;
-            const isEffectivelyMuted = track.muted || isBusMuted;
-            const isEffectivelySoloBlocked = isTrackSoloBlocked || isBusSoloBlocked;
-            const busVolumeMult = assignedBus ? assignedBus.volume : 1.0;
+        <ErrorBoundary fallbackTitle="Motor de Audio YouTube">
+          {currentView !== 'multi_video' &&
+            activeProject.channels
+              .filter((t) => t.type === 'youtube_video' && t.youtubeVideoId)
+              .map((track) => {
+              const assignedBus = activeProject.buses?.find((b) => b.id === track.busId);
+              const isBusMuted = assignedBus?.muted || false;
+              const hasAnyBusSolo = activeProject.buses?.some((b) => b.solo) || false;
+              const isBusSoloBlocked = hasAnyBusSolo && !assignedBus?.solo && !track.solo;
+              const isTrackSoloBlocked = hasAnySolo && !track.solo;
+              const isEffectivelyMuted = track.muted || isBusMuted;
+              const isEffectivelySoloBlocked = isTrackSoloBlocked || isBusSoloBlocked;
+              const busVolumeMult = assignedBus ? assignedBus.volume : 1.0;
 
-            return (
-              <YouTubePlayerEmbed
-                key={track.id}
-                trackId={track.id}
-                videoId={track.youtubeVideoId!}
-                volume={track.volume * busVolumeMult}
-                masterVolume={activeProject.masterVolume}
-                isPlaying={isPlaying}
-                muted={isEffectivelyMuted}
-                isSoloBlocked={isEffectivelySoloBlocked}
-                visible={false}
-                onAutoReplace={() => {
-                  const cleanName = track.name.replace(/\(.*?\)/g, '').trim();
-                  const fallback = VerifiedVideoLibrary.getNextWorkingVideo(
-                    track.youtubeVideoId,
-                    cleanName,
-                    track.category
-                  );
-                  handleUpdateChannel(track.id, {
-                    youtubeVideoId: fallback.videoId,
-                    youtubeThumbnail: fallback.thumbnail,
-                    name: fallback.title.slice(0, 26),
-                    isUnavailable: false,
-                  });
-                }}
-                onErrorChange={(err) => {
-                  if (err && !track.isUnavailable) {
-                    handleUpdateChannel(track.id, { isUnavailable: true });
-                  }
-                }}
-              />
-            );
-          })}
+              return (
+                <YouTubePlayerEmbed
+                  key={track.id}
+                  trackId={track.id}
+                  videoId={track.youtubeVideoId!}
+                  volume={track.volume * busVolumeMult}
+                  masterVolume={activeProject.masterVolume}
+                  isPlaying={isPlaying}
+                  muted={isEffectivelyMuted}
+                  isSoloBlocked={isEffectivelySoloBlocked}
+                  visible={false}
+                  onAutoReplace={() => {
+                    const cleanName = track.name.replace(/\(.*?\)/g, '').trim();
+                    const fallback = VerifiedVideoLibrary.getNextWorkingVideo(
+                      track.youtubeVideoId,
+                      cleanName,
+                      track.category
+                    );
+                    const safeTitle = (fallback?.title || cleanName || 'Video Verificado').trim();
+                    handleUpdateChannel(track.id, {
+                      youtubeVideoId: fallback.videoId,
+                      youtubeThumbnail: fallback.thumbnail,
+                      name: safeTitle.slice(0, 26),
+                      isUnavailable: false,
+                    });
+                  }}
+                  onErrorChange={(err) => {
+                    if (err && !track.isUnavailable) {
+                      handleUpdateChannel(track.id, { isUnavailable: true });
+                    }
+                  }}
+                />
+              );
+            })}
+        </ErrorBoundary>
       </div>
 
       {/* Hidden Audio File Input for Local Import */}

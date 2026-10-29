@@ -27,9 +27,13 @@ import {
   Layers,
   Zap,
   Sliders,
+  Palette,
+  Activity,
+  RotateCcw,
 } from 'lucide-react';
 import {
   MilkdropConfig,
+  DEFAULT_MILKDROP_CONFIG,
   loadMilkdropConfig,
   saveMilkdropConfig,
 } from '../types/milkdropConfig';
@@ -94,8 +98,26 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
   // MilkDrop Parameter Customization & Live Physics State
   const [config, setConfig] = useState<MilkdropConfig>(() => loadMilkdropConfig());
   const [isConfigOpen, setIsConfigOpen] = useState<boolean>(false);
+  const [showQuickBar, setShowQuickBar] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('soundscape_milkdrop_quickbar');
+      return saved !== null ? saved === 'true' : false;
+    } catch {
+      return false;
+    }
+  });
   const configRef = useRef<MilkdropConfig>(config);
   const dynamicHueRef = useRef<number>(config.hueRotate);
+
+  const toggleQuickBar = (val?: boolean) => {
+    setShowQuickBar((prev) => {
+      const next = val !== undefined ? val : !prev;
+      try {
+        localStorage.setItem('soundscape_milkdrop_quickbar', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   // Sync configRef & audio sensitivity on change
   useEffect(() => {
@@ -115,24 +137,33 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
       }
     };
     const handleOpenCfg = () => setIsConfigOpen(true);
+    const handleToggleBar = (e: any) => {
+      toggleQuickBar(e.detail?.show);
+    };
 
     window.addEventListener('butterchurn_config_updated', handleConfigChange);
     window.addEventListener('butterchurn_open_config', handleOpenCfg);
+    window.addEventListener('butterchurn_toggle_quickbar', handleToggleBar);
 
     return () => {
       window.removeEventListener('butterchurn_config_updated', handleConfigChange);
       window.removeEventListener('butterchurn_open_config', handleOpenCfg);
+      window.removeEventListener('butterchurn_toggle_quickbar', handleToggleBar);
     };
   }, []);
 
-  // Shortcut 'C' key toggles configuration panel
+  // Shortcut keys: 'C' toggles configuration panel, 'F' toggles on-canvas quick physics bar
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isSearchOpen) return;
-      if (e.key.toLowerCase() === 'c' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        const target = e.target as HTMLElement;
-        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) return;
-        setIsConfigOpen((v) => !v);
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) return;
+      if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (e.key.toLowerCase() === 'c') {
+          setIsConfigOpen((v) => !v);
+        } else if (e.key.toLowerCase() === 'f') {
+          toggleQuickBar();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -295,6 +326,15 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
 
           // 3. Render frame with animation speed time dilation
           visualizerRef.current.render({ elapsedTime: dt * cfg.animationSpeed });
+
+          // 4. Blit live GPU frame to panel preview monitor if open
+          const previewCanvas = document.getElementById('milkdrop-preview-canvas') as HTMLCanvasElement;
+          if (previewCanvas && canvasRef.current) {
+            const pCtx = previewCanvas.getContext('2d');
+            if (pCtx) {
+              pCtx.drawImage(canvasRef.current, 0, 0, previewCanvas.width, previewCanvas.height);
+            }
+          }
         } catch (e) {}
       }
     };
@@ -630,6 +670,22 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
                 />
                 <span className="text-[11px]">
                   {isTabAudioActive ? 'YouTube en Vivo' : '⚡ Audio en Vivo'}
+                </span>
+              </button>
+
+              {/* In-Canvas Live Physics Bar (Zero Windows) Toggle Button */}
+              <button
+                onClick={() => toggleQuickBar()}
+                title="Ajustar físicas, velocidad, zoom, warp y colores directamente sobre la pantalla sin abrir ninguna ventana (Atajo: F)"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold backdrop-blur-xl transition-all cursor-pointer shadow-lg border ${
+                  showQuickBar
+                    ? 'bg-gradient-to-r from-cyan-600 to-blue-600 border-cyan-300 text-white shadow-cyan-500/30 ring-2 ring-cyan-400/50'
+                    : 'bg-slate-950/85 border-cyan-500/40 text-cyan-300 hover:bg-cyan-900/80 hover:border-cyan-300'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-cyan-300 animate-pulse" />
+                <span className="text-[11px] font-bold">
+                  {showQuickBar ? '⚡ Físicas en Pantalla (ON)' : '⚡ Físicas en Pantalla (F)'}
                 </span>
               </button>
 
@@ -1003,6 +1059,311 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
             </div>
           )}
         </>
+      )}
+
+      {/* In-Canvas Live Sliders Strip: Zero Windows Needed, Direct On-Screen Tuning at 60 FPS */}
+      {showQuickBar && (
+        <div className="absolute bottom-3 sm:bottom-4 left-2 right-2 sm:left-4 sm:right-4 z-30 max-w-5xl mx-auto bg-slate-950/85 backdrop-blur-xl border border-cyan-500/40 rounded-2xl p-3 sm:p-4 text-slate-200 shadow-2xl animate-fade-in pointer-events-auto select-none">
+          {/* Bar Header: Title, Preset Name & Macro Picks */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-slate-800/80 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="p-1 rounded-lg bg-cyan-950 border border-cyan-500/40 text-cyan-400">
+                <Zap className="w-3.5 h-3.5 animate-pulse" />
+              </span>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-slate-100 text-[11px] tracking-wide uppercase">
+                    Físicas en Directo (Sin Ventanas)
+                  </span>
+                  <span className="px-1.5 py-0.2 rounded-md bg-cyan-950/90 text-cyan-300 font-mono text-[9px] border border-cyan-500/30">
+                    Live 60 FPS
+                  </span>
+                </div>
+                <span className="text-[10px] text-cyan-300/80 font-mono truncate max-w-[200px] sm:max-w-xs">
+                  {currentPresetName.replace(/_/g, ' ')}
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Macro Profile Buttons */}
+            <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar">
+              <span className="text-[10px] uppercase font-bold text-slate-500 hidden sm:inline">
+                Macros:
+              </span>
+              <button
+                onClick={() => {
+                  const upd: MilkdropConfig = {
+                    ...config,
+                    animationSpeed: 1.15,
+                    audioGain: 2.2,
+                    bassBoost: 10,
+                    warpMultiplier: 1.35,
+                    zoomMultiplier: 1.04,
+                  };
+                  setConfig(upd);
+                  saveMilkdropConfig(upd);
+                }}
+                className="px-2 py-0.5 rounded-lg bg-orange-950/80 border border-orange-500/50 text-orange-300 hover:bg-orange-900 text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                title="Macro Hiper Club: Graves potentes, alta reactividad y warp"
+              >
+                <Flame className="w-2.5 h-2.5 text-orange-400" /> Hiper
+              </button>
+
+              <button
+                onClick={() => {
+                  const upd: MilkdropConfig = {
+                    ...config,
+                    animationSpeed: 0.55,
+                    audioGain: 0.9,
+                    bassBoost: 0,
+                    warpMultiplier: 0.65,
+                    zoomMultiplier: 1.015,
+                  };
+                  setConfig(upd);
+                  saveMilkdropConfig(upd);
+                }}
+                className="px-2 py-0.5 rounded-lg bg-teal-950/80 border border-teal-500/50 text-teal-300 hover:bg-teal-900 text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                title="Macro Zen: Movimiento lento, relajante y fluido"
+              >
+                <Sparkles className="w-2.5 h-2.5 text-teal-400" /> Zen
+              </button>
+
+              <button
+                onClick={() => {
+                  const upd: MilkdropConfig = {
+                    ...config,
+                    hueRotate: (config.hueRotate + 90) % 360,
+                    saturation: 160,
+                    contrast: 120,
+                  };
+                  setConfig(upd);
+                  saveMilkdropConfig(upd);
+                }}
+                className="px-2 py-0.5 rounded-lg bg-purple-950/80 border border-purple-500/50 text-purple-300 hover:bg-purple-900 text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                title="Girar tono de color +90° y saturar"
+              >
+                <Palette className="w-2.5 h-2.5 text-purple-400" /> Neón
+              </button>
+
+              <button
+                onClick={() => {
+                  setConfig(DEFAULT_MILKDROP_CONFIG);
+                  saveMilkdropConfig(DEFAULT_MILKDROP_CONFIG);
+                }}
+                className="px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                title="Restablecer parámetros originales de fábrica"
+              >
+                <RotateCcw className="w-2.5 h-2.5" /> Reset
+              </button>
+
+              <span className="w-px h-3.5 bg-slate-800 mx-0.5" />
+
+              <button
+                onClick={() => setIsConfigOpen(true)}
+                className="px-2 py-0.5 rounded-lg bg-cyan-950 border border-cyan-500/50 text-cyan-300 hover:bg-cyan-900 text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                title="Abrir panel lateral con todas las opciones avanzadas (C)"
+              >
+                <Sliders className="w-2.5 h-2.5" /> Panel (C)
+              </button>
+
+              <button
+                onClick={() => toggleQuickBar(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Cerrar barra de físicas en pantalla (F)"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Sliders Grid: 6 Real-Time Physics Controllers */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3 text-xs">
+            {/* 1. Velocidad */}
+            <div className="flex flex-col gap-1 bg-slate-900/80 p-2 rounded-xl border border-slate-800">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold text-slate-300 flex items-center gap-1">
+                  <Clock className="w-2.5 h-2.5 text-cyan-400" /> Velocidad
+                </span>
+                <span className="font-mono text-[10px] text-cyan-300 font-bold">
+                  {config.animationSpeed.toFixed(2)}x
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0.2"
+                max="3.0"
+                step="0.05"
+                value={config.animationSpeed}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  const upd = { ...config, animationSpeed: v };
+                  setConfig(upd);
+                  saveMilkdropConfig(upd);
+                }}
+                className="w-full accent-cyan-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+              <div className="flex justify-between text-[8px] text-slate-500 font-mono">
+                <span>0.2x Lento</span>
+                <span>3.0x Hiper</span>
+              </div>
+            </div>
+
+            {/* 2. Zoom */}
+            <div className="flex flex-col gap-1 bg-slate-900/80 p-2 rounded-xl border border-slate-800">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold text-slate-300 flex items-center gap-1">
+                  <Maximize2 className="w-2.5 h-2.5 text-sky-400" /> Zoom
+                </span>
+                <span className="font-mono text-[10px] text-sky-300 font-bold">
+                  {config.zoomMultiplier.toFixed(2)}x
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0.6"
+                max="1.8"
+                step="0.02"
+                value={config.zoomMultiplier}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  const upd = { ...config, zoomMultiplier: v };
+                  setConfig(upd);
+                  saveMilkdropConfig(upd);
+                }}
+                className="w-full accent-sky-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+              <div className="flex justify-between text-[8px] text-slate-500 font-mono">
+                <span>0.6x Out</span>
+                <span>1.8x In</span>
+              </div>
+            </div>
+
+            {/* 3. Deformación / Warp */}
+            <div className="flex flex-col gap-1 bg-slate-900/80 p-2 rounded-xl border border-slate-800">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold text-slate-300 flex items-center gap-1">
+                  <Zap className="w-2.5 h-2.5 text-amber-400" /> Warp
+                </span>
+                <span className="font-mono text-[10px] text-amber-300 font-bold">
+                  {config.warpMultiplier.toFixed(2)}x
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0.0"
+                max="3.5"
+                step="0.05"
+                value={config.warpMultiplier}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  const upd = { ...config, warpMultiplier: v };
+                  setConfig(upd);
+                  saveMilkdropConfig(upd);
+                }}
+                className="w-full accent-amber-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+              <div className="flex justify-between text-[8px] text-slate-500 font-mono">
+                <span>0.0 Plano</span>
+                <span>3.5 Vórtice</span>
+              </div>
+            </div>
+
+            {/* 4. Sensibilidad Audio (Gain) */}
+            <div className="flex flex-col gap-1 bg-slate-900/80 p-2 rounded-xl border border-slate-800">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold text-slate-300 flex items-center gap-1">
+                  <Activity className="w-2.5 h-2.5 text-emerald-400" /> Audio Gain
+                </span>
+                <span className="font-mono text-[10px] text-emerald-300 font-bold">
+                  {config.audioGain.toFixed(1)}x
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0.2"
+                max="4.0"
+                step="0.1"
+                value={config.audioGain}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  const upd = { ...config, audioGain: v };
+                  setConfig(upd);
+                  saveMilkdropConfig(upd);
+                }}
+                className="w-full accent-emerald-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+              <div className="flex justify-between text-[8px] text-slate-500 font-mono">
+                <span>0.2x Suave</span>
+                <span>4.0x Punch</span>
+              </div>
+            </div>
+
+            {/* 5. Pegada de Bajos (Bass Boost) */}
+            <div className="flex flex-col gap-1 bg-slate-900/80 p-2 rounded-xl border border-slate-800">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold text-slate-300 flex items-center gap-1">
+                  <Flame className="w-2.5 h-2.5 text-rose-400" /> Graves (Sub)
+                </span>
+                <span className="font-mono text-[10px] text-rose-300 font-bold">
+                  +{config.bassBoost} dB
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="18"
+                step="1"
+                value={config.bassBoost}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value);
+                  const upd = { ...config, bassBoost: v };
+                  setConfig(upd);
+                  saveMilkdropConfig(upd);
+                }}
+                className="w-full accent-rose-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+              />
+              <div className="flex justify-between text-[8px] text-slate-500 font-mono">
+                <span>0 dB Flat</span>
+                <span>+18 dB Bass</span>
+              </div>
+            </div>
+
+            {/* 6. Tono de Color (Hue Rotate) */}
+            <div className="flex flex-col gap-1 bg-slate-900/80 p-2 rounded-xl border border-slate-800">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold text-slate-300 flex items-center gap-1">
+                  <Palette className="w-2.5 h-2.5 text-purple-400" /> Tono Color
+                </span>
+                <span className="font-mono text-[10px] text-purple-300 font-bold">
+                  {config.hueRotate}°
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="360"
+                step="5"
+                value={config.hueRotate}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value);
+                  const upd = { ...config, hueRotate: v };
+                  setConfig(upd);
+                  saveMilkdropConfig(upd);
+                }}
+                style={{
+                  background:
+                    'linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)',
+                }}
+                className="w-full h-1.5 rounded-lg cursor-pointer appearance-none"
+              />
+              <div className="flex justify-between text-[8px] text-slate-500 font-mono">
+                <span>0° Rojo</span>
+                <span>180° Cyan</span>
+                <span>360°</span>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* MilkDrop Internal Config & Physics Calibration Panel */}

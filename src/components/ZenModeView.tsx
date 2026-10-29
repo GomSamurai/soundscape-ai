@@ -453,13 +453,25 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
           <button
             onClick={(e) => {
               e.stopPropagation();
+              window.dispatchEvent(new CustomEvent('butterchurn_toggle_quickbar'));
+            }}
+            title="Ajustar físicas y velocidad directamente sobre la pantalla en vivo sin ventanas (Atajo: F)"
+            className="p-1.5 hover:bg-slate-800/80 text-cyan-300 hover:text-white rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 text-xs"
+          >
+            <Zap className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="text-[11px] font-semibold hidden md:inline">Físicas (F)</span>
+          </button>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
               setIsConfigOpen(true);
             }}
             title="Ajustes de MilkDrop: Físicas, Sonido, Colores, Velocidad y Código (C)"
             className="p-1.5 hover:bg-slate-800/80 text-cyan-400 hover:text-cyan-200 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 text-xs"
           >
             <Sliders className="w-3.5 h-3.5" />
-            <span className="text-[11px] font-semibold hidden md:inline">Ajustes</span>
+            <span className="text-[11px] font-semibold hidden md:inline">Ajustes (C)</span>
           </button>
         </div>
 
@@ -633,6 +645,15 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
             }`}
           >
             <Star className={`w-4 h-4 ${isCurrentFavorite ? 'fill-amber-400' : ''}`} />
+          </button>
+
+          {/* Quick On-Canvas Physics Strip Launcher */}
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('butterchurn_toggle_quickbar'))}
+            title="Ajustar físicas y velocidad directamente sobre la pantalla sin ventanas (Atajo: F)"
+            className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-cyan-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            <Zap className="w-4 h-4 text-cyan-400" />
           </button>
 
           {/* Quick MilkDrop Config Launcher */}

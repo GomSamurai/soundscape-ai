@@ -47,6 +47,8 @@ export const MilkdropConfigPanel: React.FC<MilkdropConfigPanelProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>('physics');
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
   const [copiedConfig, setCopiedConfig] = useState<boolean>(false);
+  const [isSemiTransparent, setIsSemiTransparent] = useState<boolean>(false);
+  const [showMiniMonitor, setShowMiniMonitor] = useState<boolean>(true);
 
   if (!isOpen) return null;
 
@@ -102,31 +104,40 @@ export const MilkdropConfigPanel: React.FC<MilkdropConfigPanelProps> = ({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-2xl p-3 sm:p-6 flex flex-col justify-center items-center animate-fade-in select-none"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 pointer-events-none select-none animate-fade-in flex justify-end">
+      {/* Clickable transparent overlay to close when clicking outside (NO BLUR, visualizer is 100% visible) */}
       <div
-        className="w-full max-w-3xl max-h-[90vh] bg-slate-900/95 border border-cyan-500/30 rounded-3xl p-4 sm:p-6 flex flex-col shadow-2xl shadow-cyan-950/40 overflow-hidden"
+        className="fixed inset-0 bg-black/15 pointer-events-auto transition-opacity"
+        onClick={onClose}
+        title="Clic fuera para cerrar panel (el visualizador permanece visible a la izquierda)"
+      />
+
+      {/* Floating Side-Drawer (Visualizer remains 100% visible on the left!) */}
+      <div
+        className={`relative z-10 w-full sm:w-[490px] md:w-[530px] h-full pointer-events-auto flex flex-col border-l border-cyan-500/40 shadow-2xl transition-all duration-200 p-4 sm:p-5 overflow-hidden ${
+          isSemiTransparent
+            ? 'bg-slate-950/70 backdrop-blur-sm opacity-85'
+            : 'bg-slate-950/95 backdrop-blur-2xl'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between pb-3.5 border-b border-slate-800 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-cyan-500/15 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shadow-lg shadow-cyan-500/10">
-              <Sliders className="w-5 h-5" />
+        <div className="flex items-center justify-between pb-3 border-b border-slate-800 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-cyan-500/15 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shadow-lg shadow-cyan-500/10 shrink-0">
+              <Sliders className="w-4 h-4" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm sm:text-base font-bold text-slate-100 flex items-center gap-1.5">
-                  Calibrador & Físicas MilkDrop 2
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-sm font-bold text-slate-100 flex items-center gap-1">
+                  Calibrador MilkDrop 2
                 </h2>
-                <span className="px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-500/40 text-cyan-300 text-[10px] font-mono">
-                  WebGL GPU
+                <span className="px-1.5 py-0.2 rounded-full bg-cyan-950 border border-cyan-500/40 text-cyan-300 text-[9px] font-mono">
+                  Live GPU
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 font-mono truncate max-w-xs sm:max-w-md">
-                Preset activo:{' '}
+              <p className="text-[10px] text-slate-400 font-mono truncate max-w-[200px] sm:max-w-xs">
+                Preset:{' '}
                 <span className="text-cyan-300 font-semibold">
                   {currentPresetName.replace(/_/g, ' ') || 'Preset en curso'}
                 </span>
@@ -134,24 +145,78 @@ export const MilkdropConfigPanel: React.FC<MilkdropConfigPanelProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setShowMiniMonitor(!showMiniMonitor)}
+              title={showMiniMonitor ? 'Ocultar mini-monitor integrado' : 'Mostrar mini-monitor integrado en este panel'}
+              className={`p-1.5 rounded-xl border text-xs flex items-center gap-1 transition-colors cursor-pointer ${
+                showMiniMonitor
+                  ? 'bg-cyan-950 border-cyan-500 text-cyan-300 shadow-sm shadow-cyan-500/30'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border-slate-700'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              onClick={() => setIsSemiTransparent(!isSemiTransparent)}
+              title={
+                isSemiTransparent
+                  ? 'Modo sólido normal'
+                  : 'Modo cristal translúcido (para ver el lienzo detrás a través del panel)'
+              }
+              className={`p-1.5 rounded-xl border text-xs flex items-center gap-1 transition-colors cursor-pointer ${
+                isSemiTransparent
+                  ? 'bg-cyan-950 border-cyan-500 text-cyan-300'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border-slate-700'
+              }`}
+            >
+              <Eye className="w-3.5 h-3.5" />
+            </button>
+
             <button
               onClick={handleResetToDefaults}
               title="Restablecer todos los parámetros a valores originales de fábrica"
-              className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700 text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-2 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700 text-xs flex items-center gap-1 transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
-              <span className="hidden sm:inline">Restablecer</span>
+              <span className="text-[11px] hidden sm:inline">Reset</span>
             </button>
 
             <button
               onClick={onClose}
               className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
+
+        {/* Live Mini Visualizer Monitor inside the Panel */}
+        {showMiniMonitor && (
+          <div className="relative my-2.5 rounded-xl overflow-hidden border border-cyan-500/40 bg-black aspect-video max-h-36 shrink-0 shadow-lg group">
+            <canvas
+              id="milkdrop-preview-canvas"
+              width={320}
+              height={180}
+              className="w-full h-full block object-cover"
+            />
+            <div className="absolute top-1.5 left-2 flex items-center gap-1.5 bg-black/75 backdrop-blur-sm px-2 py-0.5 rounded-md text-[9px] text-cyan-300 font-mono border border-cyan-500/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+              <span>GPU Feed en Vivo 60 FPS</span>
+            </div>
+            <div className="absolute bottom-1.5 right-2 text-[9px] text-slate-300 bg-black/60 px-1.5 py-0.5 rounded font-mono">
+              {config.animationSpeed.toFixed(2)}x • {config.audioGain.toFixed(1)}x Gain
+            </div>
+            <button
+              onClick={() => setShowMiniMonitor(false)}
+              className="absolute top-1.5 right-1.5 p-1 rounded-md bg-black/60 text-slate-400 hover:text-white transition-opacity"
+              title="Ocultar mini-monitor"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
 
         {/* Quick Calibration Macro Profiles Pills */}
         <div className="py-2.5 border-b border-slate-800/80 flex items-center gap-1.5 overflow-x-auto custom-scrollbar shrink-0">
@@ -837,8 +902,11 @@ export const MilkdropConfigPanel: React.FC<MilkdropConfigPanelProps> = ({
 
         {/* Footer Info */}
         <div className="pt-3 border-t border-slate-800 shrink-0 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400 font-mono">
-          <span>Tus ajustes se aplican en vivo a 60 FPS acelerados por WebGL.</span>
-          <span className="text-cyan-400">Presiona C en el teclado para abrir/cerrar</span>
+          <span className="text-cyan-300 font-semibold flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+            Lienzo activo 60 FPS visible a la izquierda
+          </span>
+          <span className="text-slate-400">Atajo: Tecla C</span>
         </div>
       </div>
     </div>

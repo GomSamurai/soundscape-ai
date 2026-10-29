@@ -108,6 +108,7 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
   });
   const configRef = useRef<MilkdropConfig>(config);
   const dynamicHueRef = useRef<number>(config.hueRotate);
+  const cumulativeRotRef = useRef<number>(0);
 
   const toggleQuickBar = (val?: boolean) => {
     setShowQuickBar((prev) => {
@@ -267,8 +268,104 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
         viz.connectAudio(vizNode);
       }
 
+      // 1. Hook Butterchurn Renderer prototype to support dynamic animation speed dilation & pixel equations override
+      if (viz && viz.renderer) {
+        const RendererProto = Object.getPrototypeOf(viz.renderer);
+        if (RendererProto && !RendererProto.__soundscapeHooked) {
+          RendererProto.__soundscapeHooked = true;
+          const origCalcTime = RendererProto.calcTimeAndFPS;
+          RendererProto.calcTimeAndFPS = function(elapsedTime: any) {
+            const prevTime = this.time;
+            const res = origCalcTime.call(this, elapsedTime);
+            const cfg = configRef.current;
+            if (cfg && cfg.animationSpeed !== 1.0) {
+              const delta = this.time - prevTime;
+              this.time = prevTime + delta * cfg.animationSpeed;
+            }
+            return res;
+          };
+
+          const origRunPixel = RendererProto.runPixelEquations;
+          if (origRunPixel) {
+            RendererProto.runPixelEquations = function(preset: any, mdVSFrame: any, runVertEQs: any, blending: any) {
+              if (preset && typeof preset.pixel_eqs === 'function' && !preset.pixel_eqs.__soundscapeHooked) {
+                preset.pixel_eqs.__soundscapeHooked = true;
+                const origPixelEqs = preset.pixel_eqs;
+                preset.pixel_eqs = function(a: any) {
+                  const res = origPixelEqs(a);
+                  const c = configRef.current;
+                  if (c) {
+                    if (c.zoomMultiplier !== 1.0 && res && res.zoom !== undefined) {
+                      res.zoom *= c.zoomMultiplier;
+                    }
+                    if (c.warpMultiplier !== 1.0 && res && res.warp !== undefined) {
+                      res.warp *= c.warpMultiplier;
+                    }
+                    if (c.rotationSpeed !== 0.0 && res && res.rot !== undefined) {
+                      res.rot += cumulativeRotRef.current;
+                    }
+                  }
+                  return res;
+                };
+              }
+              return origRunPixel.call(this, preset, mdVSFrame, runVertEQs, blending);
+            };
+          }
+        }
+      }
+
       if (currentPresetName && presetsMapRef.current[currentPresetName]) {
         viz.loadPreset(presetsMapRef.current[currentPresetName], 0.0);
+      }
+
+      // 2. Hook Butterchurn PresetEquationRunner prototype for live physics & dynamic baseVals injection
+      if (viz && viz.renderer && viz.renderer.presetEquationRunner) {
+        const RunnerProto = Object.getPrototypeOf(viz.renderer.presetEquationRunner);
+        if (RunnerProto && !RunnerProto.__soundscapeHooked) {
+          RunnerProto.__soundscapeHooked = true;
+          const origRunFrame = RunnerProto.runFrameEquations;
+          RunnerProto.runFrameEquations = function(globalVars: any) {
+            const cfg = configRef.current;
+            if (cfg && cfg.audioGain !== 1.0 && globalVars) {
+              if (globalVars.bass !== undefined) globalVars.bass *= cfg.audioGain;
+              if (globalVars.bass_att !== undefined) globalVars.bass_att *= cfg.audioGain;
+              if (globalVars.mid !== undefined) globalVars.mid *= cfg.audioGain;
+              if (globalVars.mid_att !== undefined) globalVars.mid_att *= cfg.audioGain;
+              if (globalVars.treb !== undefined) globalVars.treb *= cfg.audioGain;
+              if (globalVars.treb_att !== undefined) globalVars.treb_att *= cfg.audioGain;
+            }
+
+            const res = origRunFrame.call(this, globalVars);
+
+            if (this.mdVSFrame && cfg) {
+              if (cfg.zoomMultiplier !== 1.0) {
+                this.mdVSFrame.zoom = (this.mdVSFrame.zoom !== undefined ? this.mdVSFrame.zoom : 1.0) * cfg.zoomMultiplier;
+              }
+              if (cfg.warpMultiplier !== 1.0) {
+                this.mdVSFrame.warp = (this.mdVSFrame.warp !== undefined ? this.mdVSFrame.warp : 1.0) * cfg.warpMultiplier;
+              }
+              if (cfg.rotationSpeed !== 0.0) {
+                this.mdVSFrame.rot = (this.mdVSFrame.rot !== undefined ? this.mdVSFrame.rot : 0.0) + cumulativeRotRef.current;
+              }
+              if (cfg.waveScale !== 1.0) {
+                this.mdVSFrame.wave_scale = (this.mdVSFrame.wave_scale !== undefined ? this.mdVSFrame.wave_scale : 1.0) * cfg.waveScale;
+              }
+              if (cfg.useCustomDecay) {
+                this.mdVSFrame.decay = cfg.decay;
+              }
+              if (cfg.waveModeOverride >= 0) {
+                this.mdVSFrame.wave_mode = cfg.waveModeOverride;
+              }
+              if (cfg.dynamicBaseVals) {
+                for (const [k, v] of Object.entries(cfg.dynamicBaseVals)) {
+                  this.mdVSFrame[k] = v;
+                }
+              }
+            }
+
+            return res;
+          };
+        }
       }
     } catch (err) {
       console.error('Error inicializando WebGL GPU MilkDrop Butterchurn:', err);
@@ -298,36 +395,27 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
             }
           }
 
-          // 2. Dynamic live physics & geometry override into Milkdrop equations
-          const activePreset = visualizerRef.current?.renderer?.presetEquationRunner?.preset;
-          if (activePreset && activePreset.baseVals) {
-            const b = activePreset.baseVals;
-            if (activePreset.__origZoom === undefined) {
-              activePreset.__origZoom = b.zoom !== undefined ? b.zoom : 1.0;
-              activePreset.__origWarp = b.warp !== undefined ? b.warp : 1.0;
-              activePreset.__origRot = b.rot !== undefined ? b.rot : 0.0;
-              activePreset.__origWaveScale = b.wave_scale !== undefined ? b.wave_scale : 1.0;
-              activePreset.__origDecay = b.decay !== undefined ? b.decay : 0.98;
-              activePreset.__origWaveMode = b.wave_mode !== undefined ? b.wave_mode : 0;
-            }
+          // 2. Accumulate Continuous Rotation Angle
+          if (cfg.rotationSpeed !== 0) {
+            cumulativeRotRef.current = (cumulativeRotRef.current + cfg.rotationSpeed * dt * 45) % (Math.PI * 2);
+          } else {
+            cumulativeRotRef.current = 0;
+          }
 
-            b.zoom = activePreset.__origZoom * cfg.zoomMultiplier;
-            b.warp = activePreset.__origWarp * cfg.warpMultiplier;
-            b.rot = activePreset.__origRot + cfg.rotationSpeed;
-            b.wave_scale = activePreset.__origWaveScale * cfg.waveScale;
-
-            if (cfg.useCustomDecay) {
-              b.decay = cfg.decay;
-            }
-            if (cfg.waveModeOverride >= 0) {
-              b.wave_mode = cfg.waveModeOverride;
+          // 3. Continuous synchronization of dynamic baseVals into active preset & runner
+          const runner = visualizerRef.current?.renderer?.presetEquationRunner;
+          if (runner && cfg.dynamicBaseVals) {
+            for (const [k, v] of Object.entries(cfg.dynamicBaseVals)) {
+              if (runner.preset?.baseVals) runner.preset.baseVals[k] = v;
+              if (runner.mdVS) runner.mdVS[k] = v;
+              if (runner.mdVSFrame) runner.mdVSFrame[k] = v;
             }
           }
 
-          // 3. Render frame with animation speed time dilation
-          visualizerRef.current.render({ elapsedTime: dt * cfg.animationSpeed });
+          // 4. Render frame
+          visualizerRef.current.render({ elapsedTime: dt });
 
-          // 4. Blit live GPU frame to panel preview monitor if open
+          // 5. Blit live GPU frame to panel preview monitor if open
           const previewCanvas = document.getElementById('milkdrop-preview-canvas') as HTMLCanvasElement;
           if (previewCanvas && canvasRef.current) {
             const pCtx = previewCanvas.getContext('2d');
@@ -369,6 +457,14 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
   const selectPreset = (name: string, blend = 2.0) => {
     if (!name || !presetsMapRef.current[name] || !visualizerRef.current) return;
     try {
+      // Clear preset-specific dynamic baseVals overrides when transitioning to a different preset
+      if (configRef.current.dynamicBaseVals && Object.keys(configRef.current.dynamicBaseVals).length > 0) {
+        const resetCfg = { ...configRef.current, dynamicBaseVals: {} };
+        setConfig(resetCfg);
+        configRef.current = resetCfg;
+        saveMilkdropConfig(resetCfg);
+      }
+
       visualizerRef.current.loadPreset(presetsMapRef.current[name], blend);
       setCurrentPresetName(name);
       const isFav = milkdropPresetService.isFavorite(name);
@@ -689,15 +785,15 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
                 </span>
               </button>
 
-              {/* Dedicated MilkDrop Calibration & Physics Button */}
+              {/* Dedicated MilkDrop Calibration Panel Button */}
               <button
                 onClick={() => setIsConfigOpen(true)}
-                title="Abrir Calibrador de Parámetros: Físicas, Velocidad, Reacción al Sonido, Colores y Código (Atajo: C)"
+                title="Abrir Calibrador de Parámetros: Físicas, Velocidad, Reacción al Sonido, Colores e Inspector BaseVals (Atajo: C)"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold backdrop-blur-xl transition-all cursor-pointer shadow-lg border bg-cyan-950/90 border-cyan-400 text-cyan-200 hover:bg-cyan-900 shadow-cyan-500/25 ring-1 ring-cyan-500/50"
               >
                 <Sliders className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
                 <span className="text-[11px] font-bold">
-                  🎛️ Ajustes & Físicas (C)
+                  🎛️ Calibrador (C)
                 </span>
               </button>
 
@@ -723,15 +819,6 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
                   className="p-1.5 hover:bg-slate-800/80 text-slate-300 hover:text-white rounded-lg transition-colors cursor-pointer"
                 >
                   <ChevronRight className="w-4 h-4" />
-                </button>
-                <span className="w-px h-4 bg-slate-800 mx-0.5" />
-                <button
-                  onClick={() => setIsConfigOpen(true)}
-                  title="Calibrar MilkDrop: Físicas, Sonido, Colores, Velocidad y Código (C)"
-                  className="p-1.5 hover:bg-slate-800/80 text-cyan-400 hover:text-cyan-200 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
-                >
-                  <Sliders className="w-3.5 h-3.5" />
-                  <span className="text-[10px] font-semibold hidden md:inline">Ajustes</span>
                 </button>
                 <span className="w-px h-4 bg-slate-800 mx-0.5" />
                 <button

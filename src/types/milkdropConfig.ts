@@ -24,6 +24,9 @@ export interface MilkdropConfig {
   brightness: number; // 50% a 150% (100% default)
   invert: boolean; // false default
   colorCycleSpeed: number; // 0 (apagado) a 10 (velocidad de rotación cromática)
+
+  // 5. Parámetros BaseVals dinámicos modificados en el inspector en tiempo real
+  dynamicBaseVals: Record<string, number>;
 }
 
 export const DEFAULT_MILKDROP_CONFIG: MilkdropConfig = {
@@ -45,6 +48,7 @@ export const DEFAULT_MILKDROP_CONFIG: MilkdropConfig = {
   brightness: 100,
   invert: false,
   colorCycleSpeed: 0,
+  dynamicBaseVals: {},
 };
 
 export interface MilkdropProfile {

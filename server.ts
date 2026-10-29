@@ -138,6 +138,9 @@ const VERIFIED_FALLBACKS: Record<string, { id: string; title: string }> = {
   fire: { id: 'L_LUpnjgPso', title: 'Fireplace Sounds 4K' },
   classical: { id: 'RXhE9oyni_o', title: 'Classical Music for Salon & Reading' },
   banquet: { id: '_IqVz1fZ2qs', title: 'Grand Banquet Dinner & Fine China Ambience' },
+  chatter: { id: 'SMx967gwsIQ', title: 'Sonido de Gente Hablando - Ruido de Fondo Relajante' },
+  restaurant: { id: 'iphXo0rbTaY', title: 'Sonido Ambiente de Restaurante y Murmullo 8H' },
+  bar: { id: 'gK1E9gYInKI', title: 'Ambiente de Bar Español y Conversación' },
   fireplace_palace: { id: '9JpcEtLPMaA', title: 'Luxury Palace Fireplace Ambience' },
   jazz: { id: 'Dx5qFachd3A', title: 'Cozy Paris Coffee Shop Jazz' },
   lofi: { id: 'DWcJFNfaw9c', title: 'Lofi Hip Hop Radio Beats' },
@@ -149,7 +152,6 @@ const VERIFIED_FALLBACKS: Record<string, { id: string; title: string }> = {
   tavern: { id: '403ksGqDqN4', title: 'Medieval Tavern Warm Hearth & Flute' },
 };
 
-// Helper: Live YouTube Search scraper with embed validation
 // Helper: Live YouTube Search scraper with embed validation & pagination
 interface YouTubeSearchResult {
   videoId: string;
@@ -161,7 +163,6 @@ interface YouTubeSearchResult {
 
 async function searchYouTubeLive(query: string, page = 1, maxCandidates = 40): Promise<YouTubeSearchResult[]> {
   try {
-    // Generate page-specific modifier for deeper infinite results across pages
     let searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
     if (page > 1) {
       const pageModifiers = [
@@ -179,29 +180,36 @@ async function searchYouTubeLive(query: string, page = 1, maxCandidates = 40): P
     const res = await fetch(searchUrl, {
       headers: {
         'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+        'Cookie': 'SOCS=CAESEwgDEgk2NDgyOTM5NjIaAmVzIAEaBgiA_LyaBg; CONSENT=YES+1',
       },
     });
 
     if (!res.ok) return [];
     const html = await res.text();
     const match =
-      html.match(/var ytInitialData = ({.*?});<\/script>/s) ||
-      html.match(/ytInitialData\s*=\s*({.+?});/);
+      html.match(/var ytInitialData\s*=\s*({.*?});<\/script>/s) ||
+      html.match(/ytInitialData\s*=\s*({.+?});/) ||
+      html.match(/window\["ytInitialData"\]\s*=\s*({.+?});/);
     if (!match) return [];
 
     const data = JSON.parse(match[1]);
     const sectionList =
-      data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+      data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents ||
+      data?.contents?.sectionListRenderer?.contents ||
+      [];
 
     const results: YouTubeSearchResult[] = [];
     const seenIds = new Set<string>();
 
     for (const section of sectionList) {
-      const items = section?.itemSectionRenderer?.contents || [];
+      const items =
+        section?.itemSectionRenderer?.contents ||
+        section?.richGridRenderer?.contents ||
+        [];
       for (const item of items) {
-        const v = item.videoRenderer;
+        const v = item.videoRenderer || item.richItemRenderer?.content?.videoRenderer;
         if (v && v.videoId && v.title?.runs?.[0]?.text) {
           const videoId = v.videoId;
           if (seenIds.has(videoId)) continue;
@@ -229,7 +237,7 @@ async function searchYouTubeLive(query: string, page = 1, maxCandidates = 40): P
 }
 
 // Helper: Fast check if video is embeddable via YouTube oEmbed with timeout
-async function checkYouTubeEmbeddable(videoId: string, timeoutMs = 1200): Promise<boolean> {
+async function checkYouTubeEmbeddable(videoId: string, timeoutMs = 2000): Promise<boolean> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -260,7 +268,7 @@ async function searchVerifiedYouTube(
   const batchSize = 6;
   for (let i = 0; i < candidates.length && verified.length < targetCount; i += batchSize) {
     const batch = candidates.slice(i, i + batchSize);
-    const checks = await Promise.all(batch.map((c) => checkYouTubeEmbeddable(c.videoId)));
+    const checks = await Promise.all(batch.map((c) => checkYouTubeEmbeddable(c.videoId, 2000)));
     for (let j = 0; j < batch.length; j++) {
       if (checks[j]) {
         verified.push(batch[j]);
@@ -269,9 +277,22 @@ async function searchVerifiedYouTube(
     }
   }
 
+  // If oEmbed checks filtered everything out or timed out, but candidates were found:
+  if (verified.length === 0 && candidates.length > 0) {
+    return candidates.slice(0, targetCount);
+  }
+
   // Fallbacks if page 1 returned zero results
   if (verified.length === 0 && page === 1) {
     const q = query.toLowerCase();
+    if (q.includes('gente') || q.includes('hablando') || q.includes('murmullo') || q.includes('conversaci') || q.includes('bar') || q.includes('restaurante')) {
+      return [
+        { videoId: 'SMx967gwsIQ', title: 'Sonido de Gente Hablando - Ruido de Fondo Relajante', thumbnail: 'https://img.youtube.com/vi/SMx967gwsIQ/hqdefault.jpg', duration: '10:12', author: 'Ambient Sound' },
+        { videoId: 'iphXo0rbTaY', title: 'Sonido Ambiente de Restaurante y Cafetería (8 Horas)', thumbnail: 'https://img.youtube.com/vi/iphXo0rbTaY/hqdefault.jpg', duration: '8:13:58', author: 'World Ambient' },
+        { videoId: 'DqFusZ2TJsM', title: 'Sonido Gente Hablando Bar Restaurante Murmurando (2 Horas)', thumbnail: 'https://img.youtube.com/vi/DqFusZ2TJsM/hqdefault.jpg', duration: '2:00:02', author: 'Música Relax' },
+        { videoId: 'gK1E9gYInKI', title: 'Ambiente de Bar Español Lleno, Tapas y Murmullo', thumbnail: 'https://img.youtube.com/vi/gK1E9gYInKI/hqdefault.jpg', duration: '1:32:28', author: 'Elo Paradise' },
+      ];
+    }
     const fallbackList = Object.values(VERIFIED_FALLBACKS);
     for (const fb of fallbackList) {
       verified.push({
@@ -770,6 +791,130 @@ ${JSON.stringify(channels, null, 2)}`,
   }
 });
 
+// API: AI Single Channel Replacement (Smart Source Discovery & Acoustic Calibration)
+app.post('/api/gemini/replace-channel', async (req, res) => {
+  const { userPrompt, currentTrack } = req.body;
+  if (!userPrompt || typeof userPrompt !== 'string') {
+    return res.status(400).json({ error: 'userPrompt es requerido' });
+  }
+
+  const clientKey = (req.headers['x-gemini-api-key'] as string) || req.body?.apiKey;
+  const activeAi = getGenAIClient(clientKey);
+
+  let aiSuggestion: any = null;
+
+  if (activeAi) {
+    try {
+      const systemInstruction = `Eres el Diseñador Acústico e Ingeniero de Sonido de Soundscape AI.
+El usuario quiere reemplazar un canal de audio específico con una nueva fuente sonora descrita en su petición: "${userPrompt}".
+Pista actual a reemplazar: "${currentTrack?.name || 'Canal'}" (rol previo: ${currentTrack?.role || 'Ambiente'}).
+
+Tu objetivo:
+1. Diseña un 'customTitle' evocador en español (ej: "Murmullo de Gente y Cafetería", "Saxofón Nocturno Solitario", "Lluvia Fina en Cristal").
+2. Proporciona en 'youtubeSearchQuery' términos de búsqueda en inglés o español altamente efectivos para encontrar videos de larga duración y alta calidad de sonido ambiente en YouTube (ej: "people talking cafe restaurant chatter murmur ambient sound", "relaxing night jazz saxophone rain", "gentle rain on glass window 4k").
+3. Diseña los parámetros acústicos ideales para este canal:
+   - volume: volumen balanceado (0.2 a 0.85)
+   - pan: panorama estéreo (-0.8 a 0.8)
+   - filterCutoff: corte de frecuencias en Hz (800 a 18000)
+   - reverbSend: nivel de reverberación (0.05 a 0.6)
+   - delaySend: nivel de eco / delay (0 a 0.4)
+   - tapeWarmth: calidez de saturación analógica (0 a 0.5)
+   - role: rol acústico en la mezcla (ej: "foley social", "instrumento solista", "atmósfera climática")
+   - explanation: una frase concisa explicando por qué esta fuente acústica enriquece el paisaje sonoro.`;
+
+      const modelsToTry = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+      for (const mName of modelsToTry) {
+        try {
+          const response = await activeAi.models.generateContent({
+            model: mName,
+            contents: `Diseña el reemplazo perfecto para este canal: "${userPrompt}".`,
+            config: {
+              systemInstruction,
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  customTitle: { type: Type.STRING },
+                  youtubeSearchQuery: { type: Type.STRING },
+                  volume: { type: Type.NUMBER },
+                  pan: { type: Type.NUMBER },
+                  filterCutoff: { type: Type.NUMBER },
+                  reverbSend: { type: Type.NUMBER },
+                  delaySend: { type: Type.NUMBER },
+                  tapeWarmth: { type: Type.NUMBER },
+                  role: { type: Type.STRING },
+                  explanation: { type: Type.STRING },
+                },
+                required: ['customTitle', 'youtubeSearchQuery', 'volume', 'pan'],
+              },
+            },
+          });
+          if (response?.text) {
+            aiSuggestion = JSON.parse(response.text);
+            break;
+          }
+        } catch (mErr) {
+          console.warn(`Model ${mName} replace-channel failed:`, mErr);
+        }
+      }
+    } catch (apiErr) {
+      console.warn('Gemini replace-channel failed, using heuristics:', apiErr);
+    }
+  }
+
+  // Fallback heuristic if Gemini was unavailable
+  if (!aiSuggestion) {
+    const p = userPrompt.toLowerCase();
+    let query = `${userPrompt} ambience relaxing 4k`;
+    let title = userPrompt.slice(0, 32);
+    let vol = 0.6;
+    let pan = 0;
+    let role = 'Ambiente';
+
+    if (p.includes('gente') || p.includes('hablando') || p.includes('murmullo') || p.includes('conversaci')) {
+      query = 'people talking cafe restaurant chatter murmur ambient sound';
+      title = 'Murmullo de Gente y Conversación';
+      vol = 0.5;
+      pan = 0.2;
+      role = 'Foley Social';
+    } else if (p.includes('lluvia') || p.includes('tormenta')) {
+      query = 'gentle rain window thunder ambience 4k';
+      title = 'Lluvia en Ventana';
+      vol = 0.65;
+      pan = -0.25;
+      role = 'Clima';
+    } else if (p.includes('fuego') || p.includes('chimenea')) {
+      query = 'crackling fireplace cozy cabin ambience';
+      title = 'Chimenea de Leña Crujiente';
+      vol = 0.6;
+      pan = 0.3;
+      role = 'Calidez';
+    }
+
+    aiSuggestion = {
+      customTitle: title,
+      youtubeSearchQuery: query,
+      volume: vol,
+      pan: pan,
+      filterCutoff: 14000,
+      reverbSend: 0.25,
+      delaySend: 0.1,
+      tapeWarmth: 0.2,
+      role: role,
+      explanation: `Fuente acústica configurada para evocar: "${userPrompt}".`,
+    };
+  }
+
+  // Live YouTube search for the AI query
+  const searchCandidates = await searchVerifiedYouTube(aiSuggestion.youtubeSearchQuery || userPrompt, 8);
+
+  return res.json({
+    success: true,
+    aiSuggestion,
+    results: searchCandidates,
+  });
+});
+
 async function startServer() {
   const isDev = process.env.NODE_ENV !== 'production';
 
@@ -791,4 +936,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'test') {
+  startServer();
+}
+
+export default app;

@@ -38,7 +38,11 @@ interface ChannelStripProps {
   buses?: AudioBusGroup[];
   onUpdate: (updated: Partial<ChannelTrack>) => void;
   onRemove: () => void;
-  onOpenReplace?: (trackId: string, trackName: string) => void;
+  onOpenReplace?: (
+    trackId: string,
+    trackName: string,
+    initialTab?: 'ai_replace' | 'youtube_live' | 'catalog' | 'youtube_direct' | 'web_url'
+  ) => void;
 }
 
 interface QuickOption {
@@ -497,7 +501,18 @@ export const ChannelStrip: React.FC<ChannelStripProps> = ({
             </span>
           </div>
 
-          <div className="flex items-center gap-0.5">
+          <div className="flex items-center gap-1">
+            {onOpenReplace && (
+              <button
+                onClick={() => onOpenReplace(track.id, track.name, 'ai_replace')}
+                className="py-0.5 px-1.5 rounded text-[9px] font-bold bg-gradient-to-r from-violet-600 to-rose-600 hover:from-violet-500 hover:to-rose-500 text-white flex items-center gap-1 transition-all cursor-pointer shrink-0 shadow-sm shadow-violet-900/40 hover:scale-105 active:scale-95"
+                title="Reemplazar con IA (Gemini 3.8 Flash)"
+              >
+                <Sparkles className="w-2.5 h-2.5 text-amber-300 animate-pulse" />
+                <span className="text-[8px] font-mono">IA</span>
+              </button>
+            )}
+
             {(track.type === 'midi_random' || track.type === 'drone_ambient' || track.type === 'synthesizer') && (
               <button
                 onClick={() => setIsConfigOpen(!isConfigOpen)}
@@ -561,16 +576,34 @@ export const ChannelStrip: React.FC<ChannelStripProps> = ({
               )}
 
               {onOpenReplace && (
-                <button
-                  onClick={() => {
-                    setIsReplaceMenuOpen(false);
-                    onOpenReplace(track.id, track.name);
-                  }}
-                  className="w-full text-left p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[9px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors mb-1"
-                >
-                  <Search className="w-3 h-3 text-cyan-400" />
-                  <span>Buscar en YouTube o pegar URL...</span>
-                </button>
+                <>
+                  <button
+                    onClick={() => {
+                      setIsReplaceMenuOpen(false);
+                      onOpenReplace(track.id, track.name, 'ai_replace');
+                    }}
+                    className="w-full text-left p-1.5 rounded-lg bg-gradient-to-r from-violet-600/90 to-rose-600/90 hover:from-violet-500 hover:to-rose-500 text-white text-[9px] font-bold flex items-center justify-between cursor-pointer transition-all shadow-md shadow-violet-900/30 mb-1 group"
+                  >
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Sparkles className="w-3 h-3 text-amber-300 animate-pulse shrink-0" />
+                      <span className="truncate">✨ Reemplazar con IA</span>
+                    </div>
+                    <span className="text-[8px] bg-black/40 text-amber-200 px-1 py-0.2 rounded font-mono shrink-0">
+                      3.8 Flash
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsReplaceMenuOpen(false);
+                      onOpenReplace(track.id, track.name, 'youtube_live');
+                    }}
+                    className="w-full text-left p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[9px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors mb-1"
+                  >
+                    <Search className="w-3 h-3 text-cyan-400" />
+                    <span>Buscar en YouTube en directo...</span>
+                  </button>
+                </>
               )}
 
               <div className="text-[8px] uppercase tracking-wider text-slate-500 font-bold px-1 pt-1 border-t border-slate-800 mb-0.5">

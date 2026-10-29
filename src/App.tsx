@@ -99,7 +99,11 @@ export default function App() {
   const [isBinauralTunerOpen, setIsBinauralTunerOpen] = useState(false);
   const [isGeminiSettingsOpen, setIsGeminiSettingsOpen] = useState(false);
   const [isTimerModalOpen, setIsTimerModalOpen] = useState(false);
-  const [replaceTarget, setReplaceTarget] = useState<{ trackId: string; trackName: string } | null>(null);
+  const [replaceTarget, setReplaceTarget] = useState<{
+    trackId: string;
+    trackName: string;
+    initialTab?: 'ai_replace' | 'youtube_live' | 'catalog' | 'youtube_direct' | 'web_url';
+  } | null>(null);
   const [isDraggingOverMixer, setIsDraggingOverMixer] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -115,8 +119,12 @@ export default function App() {
     soundAlert: boolean;
   } | null>(null);
 
-  const handleOpenReplace = (trackId: string, trackName: string) => {
-    setReplaceTarget({ trackId, trackName });
+  const handleOpenReplace = (
+    trackId: string,
+    trackName: string,
+    initialTab?: 'ai_replace' | 'youtube_live' | 'catalog' | 'youtube_direct' | 'web_url'
+  ) => {
+    setReplaceTarget({ trackId, trackName, initialTab });
     setIsSearchOpen(true);
   };
 
@@ -1325,6 +1333,7 @@ export default function App() {
         onAddTrack={handleAddTrack}
         replaceTrackId={replaceTarget?.trackId || null}
         replaceTrackName={replaceTarget?.trackName || null}
+        initialTab={replaceTarget?.initialTab}
         onReplaceTrackSource={(id, updated) => handleUpdateChannel(id, updated)}
       />
 

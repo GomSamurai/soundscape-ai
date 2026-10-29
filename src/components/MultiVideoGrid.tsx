@@ -2,7 +2,7 @@ import React from 'react';
 import { ChannelTrack } from '../types/soundscape';
 import { YouTubePlayerEmbed } from './YouTubePlayerEmbed';
 import { VerifiedVideoLibrary } from '../services/verifiedVideoLibrary';
-import { Volume2, VolumeX, Trash2, Plus, Youtube, ExternalLink, RefreshCw } from 'lucide-react';
+import { Volume2, VolumeX, Trash2, Plus, Youtube, ExternalLink, RefreshCw, Sparkles } from 'lucide-react';
 
 interface MultiVideoGridProps {
   tracks: ChannelTrack[];
@@ -12,7 +12,11 @@ interface MultiVideoGridProps {
   onUpdateTrack: (trackId: string, updated: Partial<ChannelTrack>) => void;
   onRemoveTrack: (trackId: string) => void;
   onOpenAddModal: () => void;
-  onOpenReplace?: (trackId: string, trackName: string) => void;
+  onOpenReplace?: (
+    trackId: string,
+    trackName: string,
+    initialTab?: 'ai_replace' | 'youtube_live' | 'catalog' | 'youtube_direct' | 'web_url'
+  ) => void;
 }
 
 export const MultiVideoGrid: React.FC<MultiVideoGridProps> = ({
@@ -160,13 +164,24 @@ export const MultiVideoGrid: React.FC<MultiVideoGridProps> = ({
 
                 <div className="flex items-center gap-1 shrink-0">
                   {onOpenReplace && (
-                    <button
-                      onClick={() => onOpenReplace(track.id, track.name)}
-                      title="Reemplazar video"
-                      className="p-1 text-slate-400 hover:text-cyan-400 rounded transition-colors cursor-pointer"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                    </button>
+                    <>
+                      <button
+                        onClick={() => onOpenReplace(track.id, track.name, 'ai_replace')}
+                        title="Reemplazar con IA (Gemini 3.8 Flash)"
+                        className="py-0.5 px-1.5 rounded text-[9px] font-bold bg-gradient-to-r from-violet-600 to-rose-600 hover:from-violet-500 hover:to-rose-500 text-white flex items-center gap-1 transition-all cursor-pointer shadow-sm shadow-violet-900/40 hover:scale-105 active:scale-95"
+                      >
+                        <Sparkles className="w-2.5 h-2.5 text-amber-300 animate-pulse" />
+                        <span className="text-[8px] font-mono">IA</span>
+                      </button>
+
+                      <button
+                        onClick={() => onOpenReplace(track.id, track.name, 'youtube_live')}
+                        title="Buscar video en YouTube"
+                        className="p-1 text-slate-400 hover:text-rose-400 rounded transition-colors cursor-pointer"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                      </button>
+                    </>
                   )}
 
                   {track.youtubeVideoId && (

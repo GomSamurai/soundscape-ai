@@ -60,12 +60,12 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     hasGemini: Boolean(defaultAi),
-    defaultModel: 'gemini-2.5-flash',
+    defaultModel: 'gemini-3.8-flash',
     timestamp: new Date().toISOString(),
   });
 });
 
-// API: Verify custom or default Gemini API key in real-time with gemini-2.5-flash (with fallback)
+// API: Verify custom or default Gemini API key in real-time with gemini-3.8-flash (with fallback)
 app.post('/api/gemini/verify-key', async (req, res) => {
   const clientKey = (req.headers['x-gemini-api-key'] as string) || req.body?.apiKey;
   const keyToTest = clientKey?.trim() || process.env.GEMINI_API_KEY?.trim();
@@ -87,7 +87,7 @@ app.post('/api/gemini/verify-key', async (req, res) => {
       },
     });
 
-    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    const modelsToTry = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
     let lastError: any = null;
     let successfulModel = '';
     let responseText = '';
@@ -438,7 +438,7 @@ Para capas de sintetizador procedimental:
 - Usa soundKey: 'binaural_theta', 'binaural_alpha', 'binaural_delta', 'drone_sub', 'pink_noise', 'brown_noise', 'white_noise', 'ocean', 'rain', 'wind', 'vinyl'.`;
 
       let response: any = null;
-      const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+      const modelsToTry = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
       for (const mName of modelsToTry) {
         try {
           response = await activeAi.models.generateContent({
@@ -670,7 +670,7 @@ app.post('/api/gemini/balance-mix', async (req, res) => {
 
   try {
     let response: any = null;
-    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    const modelsToTry = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
     for (const mName of modelsToTry) {
       try {
         response = await activeAi.models.generateContent({

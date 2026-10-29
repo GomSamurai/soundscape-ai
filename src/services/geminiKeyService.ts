@@ -56,7 +56,7 @@ export const GeminiKeyService = {
   },
 
   /**
-   * Direct Google Gemini REST API Verification (client-side fallback)
+   * Direct Google Gemini REST API Verification (client-side fallback with model cascade)
    */
   async verifyWithGoogleDirect(apiKey: string): Promise<VerifyKeyResult> {
     const cleanKey = apiKey.trim();
@@ -64,58 +64,55 @@ export const GeminiKeyService = {
       return { valid: false, error: 'Por favor introduce una clave de API válida de Google Gemini.' };
     }
 
-    try {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(
-        cleanKey
-      )}`;
+    const modelsToTry = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    let lastError = '';
 
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: 'Ping de conexión Soundscape AI. Responde: OK' }] }],
-        }),
-      });
-
-      const raw = await res.text();
-      let data: any = {};
+    for (const model of modelsToTry) {
       try {
-        data = JSON.parse(raw);
-      } catch {
-        return {
-          valid: false,
-          error: `Respuesta no válida del servidor (${res.status}): ${raw.slice(0, 120)}`,
-        };
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(
+          cleanKey
+        )}`;
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: 'Ping de conexión Soundscape AI. Responde: OK' }] }],
+          }),
+        });
+
+        const raw = await res.text();
+        let data: any = {};
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          continue;
+        }
+
+        if (res.ok && data.candidates && data.candidates.length > 0) {
+          const reply = data.candidates[0]?.content?.parts?.[0]?.text?.trim() || 'OK';
+          return {
+            valid: true,
+            model: model,
+            message: `Clave validada con éxito directamente con Google Gemini (${model}).`,
+            reply,
+            isCustom: true,
+          };
+        }
+
+        if (data.error?.message) {
+          // If it specifically complains about this model not being available, try next model!
+          lastError = data.error.message;
+        }
+      } catch (err: any) {
+        lastError = err.message || 'Error de conexión';
       }
-
-      if (res.ok && data.candidates && data.candidates.length > 0) {
-        const reply = data.candidates[0]?.content?.parts?.[0]?.text?.trim() || 'OK';
-        return {
-          valid: true,
-          model: 'gemini-2.5-flash',
-          message: 'Clave validada con éxito directamente con Google Gemini 2.5 Flash.',
-          reply,
-          isCustom: true,
-        };
-      }
-
-      // Handle Google specific error message
-      const errMsg =
-        data.error?.message ||
-        (res.status === 400
-          ? 'Clave de API no válida o expirada. Verifica que empiece por AIzaSy...'
-          : `Error al validar con Google (${res.status})`);
-
-      return {
-        valid: false,
-        error: errMsg,
-      };
-    } catch (err: any) {
-      return {
-        valid: false,
-        error: err.message || 'Error de red al conectar directamente con Google Gemini API.',
-      };
     }
+
+    return {
+      valid: false,
+      error: lastError || 'Error al validar con Google Gemini API.',
+    };
   },
 
   /**
@@ -148,8 +145,8 @@ export const GeminiKeyService = {
         if (res.ok && data.valid) {
           return {
             valid: true,
-            model: data.model || 'gemini-2.5-flash',
-            message: data.message || 'Clave verificada con éxito con Gemini 2.5 Flash',
+            model: data.model || 'gemini-3.8-flash',
+            message: data.message || `Clave verificada con éxito con ${data.model || 'Gemini 3.8 Flash'}`,
             isCustom: data.isCustom,
             reply: data.reply,
           };

@@ -133,34 +133,42 @@ export const AISoundscapeModal: React.FC<AISoundscapeModalProps> = ({
       const effectiveKey = customKey.trim() || GeminiKeyService.getCustomApiKey();
       if (effectiveKey) {
         try {
-          const directRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(effectiveKey)}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    parts: [
+          const modelsToTry = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+          for (const m of modelsToTry) {
+            try {
+              const directRes = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(effectiveKey)}`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    contents: [
                       {
-                        text: `You are Soundscape AI. Generate a soundscape project based on: "${textToSubmit.trim()}". Return ONLY a raw JSON object with: { "name": string, "tagline": string, "concept": string, "visualTheme": "cyan"|"amber"|"violet"|"emerald"|"rose", "binauralFreqHz": number, "masterReverb": number, "masterDelay": number, "masterWarmth": number, "category": string, "tags": string[], "channels": [ { "customTitle": string, "soundKey": string, "type": "youtube_video", "youtubeVideoId": string, "role": string, "volume": number, "pan": number, "reverbSend": number, "delaySend": number } ] }`,
+                        parts: [
+                          {
+                            text: `You are Soundscape AI. Generate a soundscape project based on: "${textToSubmit.trim()}". Return ONLY a raw JSON object with: { "name": string, "tagline": string, "concept": string, "visualTheme": "cyan"|"amber"|"violet"|"emerald"|"rose", "binauralFreqHz": number, "masterReverb": number, "masterDelay": number, "masterWarmth": number, "category": string, "tags": string[], "channels": [ { "customTitle": string, "soundKey": string, "type": "youtube_video", "youtubeVideoId": string, "role": string, "volume": number, "pan": number, "reverbSend": number, "delaySend": number } ] }`,
+                          },
+                        ],
                       },
                     ],
-                  },
-                ],
-                generationConfig: {
-                  responseMimeType: 'application/json',
-                },
-              })
-            }
-          );
+                    generationConfig: {
+                      responseMimeType: 'application/json',
+                    },
+                  })
+                }
+              );
 
-          if (directRes.ok) {
-            const directJson = await directRes.json();
-            const rawText = directJson.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (rawText) {
-              const cleaned = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-              resultData = JSON.parse(cleaned);
+              if (directRes.ok) {
+                const directJson = await directRes.json();
+                const rawText = directJson.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (rawText) {
+                  const cleaned = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+                  resultData = JSON.parse(cleaned);
+                  break;
+                }
+              }
+            } catch {
+              continue;
             }
           }
         } catch (directErr) {
@@ -292,7 +300,7 @@ export const AISoundscapeModal: React.FC<AISoundscapeModalProps> = ({
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-slate-300 font-medium">Motor de Inteligencia Artificial:</span>
             <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-violet-950/80 text-violet-300 border border-violet-800/80">
-              gemini-2.5-flash
+              gemini-3.8-flash
             </span>
           </div>
 
@@ -362,7 +370,7 @@ export const AISoundscapeModal: React.FC<AISoundscapeModalProps> = ({
                 )}
                 <span>
                   {keyTestStatus.valid
-                    ? `¡Clave verificada y operativa con ${keyTestStatus.model || 'gemini-2.5-flash'}!`
+                    ? `¡Clave verificada y operativa con ${keyTestStatus.model || 'gemini-3.8-flash'}!`
                     : keyTestStatus.error}
                 </span>
               </div>

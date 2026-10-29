@@ -20,6 +20,7 @@ export class YouTubeManager {
   private isApiLoaded = false;
   private isApiLoading = false;
   private isGlobalPlaying = false;
+  private masterVolume: number = 0.85;
   private pendingInitCallbacks: (() => void)[] = [];
 
   constructor() {
@@ -196,6 +197,43 @@ export class YouTubeManager {
       }
     } catch (e) {
       console.warn('Error updating YouTube volume:', e);
+    }
+  }
+
+  public setMasterVolume(vol: number) {
+    this.masterVolume = Math.max(0, Math.min(1.2, vol));
+    this.players.forEach((managed) => {
+      if (managed.isReady && managed.player) {
+        try {
+          const effective = managed.targetVolume * this.masterVolume;
+          const ytVolume = Math.max(0, Math.min(100, Math.round(effective * 100)));
+          if (typeof managed.player.setVolume === 'function') {
+            managed.player.setVolume(ytVolume);
+            if (ytVolume <= 0) managed.player.mute();
+            else managed.player.unMute();
+          }
+        } catch (e) {}
+      }
+    });
+  }
+
+  public setVolume(trackId: string, effectiveVolume: number) {
+    const managed = this.players.get(trackId);
+    if (!managed || !managed.player || !managed.isReady) return;
+    managed.targetVolume = effectiveVolume;
+    const finalVol = effectiveVolume * this.masterVolume;
+    const ytVolume = Math.max(0, Math.min(100, Math.round(finalVol * 100)));
+    try {
+      if (typeof managed.player.setVolume === 'function') {
+        managed.player.setVolume(ytVolume);
+        if (ytVolume <= 0) {
+          managed.player.mute();
+        } else {
+          managed.player.unMute();
+        }
+      }
+    } catch (e) {
+      console.warn('Error setting YouTube volume:', e);
     }
   }
 

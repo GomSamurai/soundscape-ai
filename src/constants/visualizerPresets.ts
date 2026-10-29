@@ -87,7 +87,8 @@ export const COLOR_PALETTES: ColorPalette[] = [
 export const DEFAULT_VISUALIZER_SETTINGS: VisualizerSettings = {
   mode: 'spectrum',
   paletteId: 'cyberpunk',
-  gain: 1.2,
+  gain: 0.95,
+  smoothing: 0.82,
   decaySpeed: 'studio',
   barsCount: 64,
   peakHold: true,
@@ -288,7 +289,12 @@ export const loadStoredSettings = (): VisualizerSettings => {
     const raw = localStorage.getItem(VISUALIZER_SETTINGS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { ...DEFAULT_VISUALIZER_SETTINGS, ...parsed };
+      return {
+        ...DEFAULT_VISUALIZER_SETTINGS,
+        ...parsed,
+        smoothing: typeof parsed.smoothing === 'number' ? parsed.smoothing : 0.82,
+        gain: typeof parsed.gain === 'number' ? Math.min(parsed.gain, 1.8) : 0.95,
+      };
     }
   } catch (e) {
     console.warn('Error loading stored visualizer settings:', e);

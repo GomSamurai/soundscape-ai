@@ -265,9 +265,13 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
       }));
     }
 
-    // Ballistics decay settings
-    const attackRate = settings.decaySpeed === 'fast' ? 0.9 : settings.decaySpeed === 'studio' ? 0.75 : 0.45;
-    const decayRate = settings.decaySpeed === 'fast' ? 0.78 : settings.decaySpeed === 'studio' ? 0.88 : 0.94;
+    // Calibrated ballistics and temporal anti-jitter smoothing
+    const userSmoothing = Math.max(0.40, Math.min(0.98, settings.smoothing ?? 0.82));
+    const speedMult = settings.decaySpeed === 'fast' ? 1.35 : settings.decaySpeed === 'studio' ? 1.0 : 0.65;
+    // Attack rate: higher smoothing -> lower attack jump per frame -> no violent jitter!
+    const attackRate = Math.max(0.08, Math.min(0.70, (1 - userSmoothing) * 2.2 * speedMult));
+    // Decay rate: smooth gradual descent
+    const decayRate = Math.min(0.97, Math.max(0.85, 0.86 + userSmoothing * 0.10));
     const gainFactor = settings.gain;
 
     // Glow intensity settings in px
@@ -384,24 +388,43 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
         const binEnd = Math.max(binStart, Math.min(bufferLength - 1, Math.ceil(fHigh / binHz)));
 
         let bandPeak = 0;
+        let bandSum = 0;
+        let binCount = 0;
         for (let b = binStart; b <= binEnd; b++) {
-          if (freqArray[b] > bandPeak) {
-            bandPeak = freqArray[b];
-          }
+          const val = freqArray[b];
+          if (val > bandPeak) bandPeak = val;
+          bandSum += val;
+          binCount++;
         }
 
-        // Apply gain factor
-        bandPeak = Math.min(255, bandPeak * gainFactor);
+        // Blended peak and average energy to eliminate single-sample impulse spikes
+        const bandEnergy = binCount > 1 ? bandPeak * 0.75 + (bandSum / binCount) * 0.25 : bandPeak;
 
-        if (i < BARS_COUNT * 0.2) bassEnergy += bandPeak;
-        if (i > BARS_COUNT * 0.7) highEnergy += bandPeak;
+        // Apply calibrated gain factor
+        const targetVal = Math.min(255, bandEnergy * gainFactor);
 
-        // Ballistics calculation
+        if (i < BARS_COUNT * 0.2) bassEnergy += targetVal;
+        if (i > BARS_COUNT * 0.7) highEnergy += targetVal;
+
+        // Ballistics calculation with smooth lerp
         const prev = smoothBars.current[i] || 0;
-        const smoothed = bandPeak > prev
-          ? prev * (1 - attackRate) + bandPeak * attackRate
-          : Math.max(0, prev * decayRate - 1.2);
+        const smoothed = targetVal > prev
+          ? prev + (targetVal - prev) * attackRate
+          : Math.max(0, prev * decayRate - 0.9);
         smoothBars.current[i] = smoothed;
+      }
+
+      // 3-point Gaussian spatial smoothing filter across adjacent frequency bands [0.18, 0.64, 0.18]
+      // completely cancels out single-bin scalloping jitter while preserving genuine musical response!
+      const rawBars = new Float32Array(BARS_COUNT);
+      for (let i = 0; i < BARS_COUNT; i++) {
+        rawBars[i] = smoothBars.current[i];
+      }
+      for (let i = 0; i < BARS_COUNT; i++) {
+        const left = i > 0 ? rawBars[i - 1] : rawBars[i];
+        const center = rawBars[i];
+        const right = i < BARS_COUNT - 1 ? rawBars[i + 1] : rawBars[i];
+        smoothBars.current[i] = left * 0.18 + center * 0.64 + right * 0.18;
       }
 
       bassEnergy = bassEnergy / (BARS_COUNT * 0.2 * 255);
@@ -996,6 +1019,21 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
             )}
           </div>
 
+          {/* Quick Sensitivity & Smoothing Badges (Opens Dynamics Tab) */}
+          <button
+            onClick={() => {
+              setActiveTab('dynamics');
+              setIsSettingsOpen(true);
+            }}
+            title="Ajustar Sensibilidad y Suavizado anti-tembleque"
+            className="hidden md:flex items-center gap-1.5 px-2 py-1 text-[10px] font-mono rounded-lg bg-slate-900/90 border border-slate-800 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
+          >
+            <Activity className="w-3 h-3 text-cyan-400" />
+            <span>Sens: {settings.gain.toFixed(2)}x</span>
+            <span className="text-slate-600">|</span>
+            <span>Suav: {Math.round((settings.smoothing ?? 0.82) * 100)}%</span>
+          </button>
+
           {/* Height Toggle (Compact / Medium / Tall) */}
           <button
             onClick={() => {
@@ -1360,22 +1398,46 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
                   {/* Visual Gain / Sensitivity */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-slate-200">Sensibilidad / Ganancia Visual</span>
+                      <span className="font-bold text-slate-200">Sensibilidad / Ganancia de Entrada</span>
                       <span className="font-mono text-cyan-400 font-bold">{settings.gain.toFixed(2)}x</span>
                     </div>
                     <input
                       type="range"
-                      min="0.5"
-                      max="3.0"
+                      min="0.2"
+                      max="2.5"
                       step="0.05"
                       value={settings.gain}
                       onChange={(e) => updateSettings({ gain: parseFloat(e.target.value) })}
                       className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
                     />
                     <div className="flex justify-between text-[10px] text-slate-500 font-mono">
-                      <span>0.5x (Atenuado)</span>
-                      <span>1.0x (Estándar)</span>
-                      <span>3.0x (Ultra Sensible)</span>
+                      <span>0.2x (Atenuado)</span>
+                      <span>0.95x (Estudio Equilibrado)</span>
+                      <span>2.5x (Ultra Reactivo)</span>
+                    </div>
+                  </div>
+
+                  {/* Temporal Smoothing / Anti-Jitter */}
+                  <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-200">Suavizado Temporal (Anti-Tembleque)</span>
+                      <span className="font-mono text-cyan-400 font-bold">
+                        {Math.round((settings.smoothing ?? 0.82) * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.40"
+                      max="0.96"
+                      step="0.02"
+                      value={settings.smoothing ?? 0.82}
+                      onChange={(e) => updateSettings({ smoothing: parseFloat(e.target.value) })}
+                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                    />
+                    <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                      <span>40% (Rápido / Directo)</span>
+                      <span>82% (Estudio Sedoso)</span>
+                      <span>96% (Ultra Fluido Zen)</span>
                     </div>
                   </div>
 

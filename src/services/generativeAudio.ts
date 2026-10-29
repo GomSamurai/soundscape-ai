@@ -44,19 +44,19 @@ export class GenerativeAudioService {
     destination: AudioNode,
     ctx: AudioContext,
     isEnginePlaying: () => boolean
-  ): { cleanup: () => void; triggerChord: () => void } {
+  ): { cleanup: () => void; triggerChord: () => void; updateParams: (t: ChannelTrack) => void } {
     let intervalTimer: any = null;
     let step = 0;
     let currentChordFrequencies: number[] = [];
 
     const rootFreq = 130.81; // C3 standard anchor
-    const scale = track.midiScale || 'pentatonic_major';
-    const intervals = SCALE_INTERVALS[scale] || SCALE_INTERVALS.pentatonic_major;
-    const bpm = track.midiBpm || 65;
-    const mode: MidiPlayMode = track.midiPlayMode || 'chords';
-    const soundPreset: MidiSoundPreset = track.midiSoundPreset || 'rhodes';
-    const octave = track.midiOctave || 3;
-    const octaveMultiplier = Math.pow(2, octave - 3);
+    let scale = track.midiScale || 'pentatonic_major';
+    let intervals = SCALE_INTERVALS[scale] || SCALE_INTERVALS.pentatonic_major;
+    let bpm = track.midiBpm || 65;
+    let mode: MidiPlayMode = track.midiPlayMode || 'chords';
+    let soundPreset: MidiSoundPreset = track.midiSoundPreset || 'rhodes';
+    let octave = track.midiOctave || 3;
+    let octaveMultiplier = Math.pow(2, octave - 3);
 
     // Compute frequencies for scale notes
     const getScaleFreq = (degree: number): number => {
@@ -170,7 +170,7 @@ export class GenerativeAudioService {
     };
 
     // Calculate tick time in ms
-    const tickMs = Math.max(250, (60 / bpm) * 1000);
+    let tickMs = Math.max(250, (60 / bpm) * 1000);
 
     const onTick = () => {
       if (!isEnginePlaying() || ctx.state !== 'running') return;
@@ -202,11 +202,34 @@ export class GenerativeAudioService {
 
     intervalTimer = setInterval(onTick, tickMs);
 
+    const updateMidiParams = (t: ChannelTrack) => {
+      if (t.midiScale && t.midiScale !== scale) {
+        scale = t.midiScale;
+        intervals = SCALE_INTERVALS[scale] || SCALE_INTERVALS.pentatonic_major;
+      }
+      if (t.midiPlayMode) mode = t.midiPlayMode;
+      if (t.midiSoundPreset) soundPreset = t.midiSoundPreset;
+      if (typeof t.midiOctave === 'number' && t.midiOctave !== octave) {
+        octave = t.midiOctave;
+        octaveMultiplier = Math.pow(2, octave - 3);
+      }
+      if (typeof t.midiBpm === 'number' && t.midiBpm !== bpm) {
+        bpm = Math.max(30, Math.min(180, t.midiBpm));
+        tickMs = (60 / bpm) * 1000 * 0.5;
+        if (intervalTimer) {
+          clearInterval(intervalTimer);
+          intervalTimer = setInterval(onTick, tickMs);
+        }
+      }
+      currentChordFrequencies = pickNewChord();
+    };
+
     return {
       cleanup: () => {
         if (intervalTimer) clearInterval(intervalTimer);
       },
       triggerChord: triggerChordNow,
+      updateParams: updateMidiParams,
     };
   }
 
@@ -217,163 +240,199 @@ export class GenerativeAudioService {
     destination: AudioNode,
     ctx: AudioContext
   ): { cleanup: () => void; updateParams: (t: ChannelTrack) => void } {
-    const cleanups: (() => void)[] = [];
-
-    const rootNote: DroneRootNote = track.droneRootNote || 'D';
-    const baseFreq = NOTE_BASE_FREQ[rootNote] || 73.42;
-    const oct = track.droneOctave || 2;
-    const octaveMult = oct === 1 ? 0.5 : oct === 3 ? 2.0 : 1.0;
-    const fundamental = baseFreq * octaveMult;
-    const texture: DroneTexture = track.droneTexture || 'warm_pad';
-    const detuneSpread = (track.droneDetune ?? 0.35) * 25; // cents
-    const movementSpeed = (track.droneMovement ?? 0.4) * 0.3 + 0.05; // Hz
+    let currentRootNote: DroneRootNote = track.droneRootNote || 'D';
+    let currentOctave: number = track.droneOctave || 2;
+    let currentTexture: DroneTexture = track.droneTexture || 'warm_pad';
+    let currentDetune: number = track.droneDetune ?? 0.35;
 
     const masterDroneGain = ctx.createGain();
     masterDroneGain.gain.setValueAtTime(0, ctx.currentTime);
-    masterDroneGain.gain.linearRampToValueAtTime(0.55, ctx.currentTime + 1.5);
+    masterDroneGain.gain.linearRampToValueAtTime(0.55, ctx.currentTime + 1.2);
     masterDroneGain.connect(destination);
 
-    // Warm filter with gentle resonance
     const filter = ctx.createBiquadFilter();
-    filter.type = texture === 'dark_void' ? 'lowpass' : 'lowpass';
-    filter.frequency.value = texture === 'dark_void' ? 240 : texture === 'crystal_shimmer' ? 3800 : 950;
-    filter.Q.value = texture === 'crystal_shimmer' ? 2.0 : 0.8;
+    filter.type = 'lowpass';
     filter.connect(masterDroneGain);
 
-    // Organic breathing LFO modulating the filter
     const lfo = ctx.createOscillator();
     const lfoGain = ctx.createGain();
     lfo.type = 'sine';
-    lfo.frequency.value = movementSpeed;
-    lfoGain.gain.value = filter.frequency.value * 0.32;
+    lfo.frequency.value = 0.12;
     lfo.connect(lfoGain);
     lfoGain.connect(filter.frequency);
     lfo.start();
 
-    cleanups.push(() => {
-      try {
-        lfo.stop();
-        lfo.disconnect();
-        lfoGain.disconnect();
-      } catch (e) {}
-    });
+    let activeOscillators: OscillatorNode[] = [];
+    let activeNodes: AudioNode[] = [];
 
-    const activeOscillators: OscillatorNode[] = [];
-
-    if (texture === 'dark_void') {
-      // Sub-bass sine + triangle one octave down with tape warmth
-      const sub = ctx.createOscillator();
-      sub.type = 'sine';
-      sub.frequency.value = fundamental * 0.5;
-
-      const body = ctx.createOscillator();
-      body.type = 'triangle';
-      body.frequency.value = fundamental;
-
-      sub.connect(filter);
-      body.connect(filter);
-      sub.start();
-      body.start();
-      activeOscillators.push(sub, body);
-    } else if (texture === 'crystal_shimmer') {
-      // Fundamental + 5th + 8ve + high chime harmonics
-      const freqs = [fundamental, fundamental * 1.5, fundamental * 2.0, fundamental * 3.0];
-      const gains = [0.45, 0.25, 0.18, 0.10];
-      freqs.forEach((f, idx) => {
-        const osc = ctx.createOscillator();
-        const g = ctx.createGain();
-        osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
-        osc.frequency.value = f;
-        g.gain.value = gains[idx];
-        osc.connect(g);
-        g.connect(filter);
-        osc.start();
-        activeOscillators.push(osc);
-      });
-    } else if (texture === 'tibetan_om') {
-      // Additive meditation chime with slow sacred beat
-      const freqs = [fundamental, fundamental * 2.76, fundamental * 5.4];
-      const gains = [0.55, 0.22, 0.08];
-      freqs.forEach((f, idx) => {
-        const osc = ctx.createOscillator();
-        const g = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = f;
-        g.gain.value = gains[idx];
-        osc.connect(g);
-        g.connect(filter);
-        osc.start();
-        activeOscillators.push(osc);
-      });
-    } else {
-      // 'warm_pad' & 'solar_wind': Triad cluster with stereo detuning
-      const oscL = ctx.createOscillator();
-      const oscC = ctx.createOscillator();
-      const oscR = ctx.createOscillator();
-
-      oscL.type = 'sawtooth';
-      oscL.frequency.value = fundamental;
-      oscL.detune.value = -detuneSpread;
-
-      oscC.type = 'triangle';
-      oscC.frequency.value = fundamental;
-
-      oscR.type = 'sawtooth';
-      oscR.frequency.value = fundamental;
-      oscR.detune.value = detuneSpread;
-
-      const pannerL = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
-      const pannerR = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
-
-      if (pannerL && pannerR) {
-        pannerL.pan.value = -0.6;
-        pannerR.pan.value = 0.6;
-        oscL.connect(pannerL);
-        pannerL.connect(filter);
-        oscR.connect(pannerR);
-        pannerR.connect(filter);
-      } else {
-        oscL.connect(filter);
-        oscR.connect(filter);
-      }
-      oscC.connect(filter);
-
-      oscL.start();
-      oscC.start();
-      oscR.start();
-      activeOscillators.push(oscL, oscC, oscR);
-    }
-
-    cleanups.push(() => {
+    const destroyCurrentTexture = () => {
       activeOscillators.forEach((osc) => {
         try {
           osc.stop();
           osc.disconnect();
         } catch (e) {}
       });
-      try {
-        filter.disconnect();
-        masterDroneGain.disconnect();
-      } catch (e) {}
-    });
+      activeNodes.forEach((node) => {
+        try {
+          node.disconnect();
+        } catch (e) {}
+      });
+      activeOscillators = [];
+      activeNodes = [];
+    };
 
-    return {
-      cleanup: () => {
-        cleanups.forEach((fn) => fn());
-      },
-      updateParams: (t: ChannelTrack) => {
-        const newRoot = t.droneRootNote || 'D';
-        const newBase = NOTE_BASE_FREQ[newRoot] || 73.42;
-        const newOct = t.droneOctave || 2;
-        const newMult = newOct === 1 ? 0.5 : newOct === 3 ? 2.0 : 1.0;
-        const newFund = newBase * newMult;
+    const buildTexture = () => {
+      destroyCurrentTexture();
+
+      const baseFreq = NOTE_BASE_FREQ[currentRootNote] || 73.42;
+      const octaveMult = currentOctave === 1 ? 0.5 : currentOctave === 3 ? 2.0 : 1.0;
+      const fundamental = baseFreq * octaveMult;
+      const detuneSpread = currentDetune * 25; // cents
+
+      // Configure filter for texture
+      filter.frequency.setTargetAtTime(
+        currentTexture === 'dark_void' ? 240 : currentTexture === 'crystal_shimmer' ? 3800 : 950,
+        ctx.currentTime,
+        0.1
+      );
+      filter.Q.setTargetAtTime(currentTexture === 'crystal_shimmer' ? 2.0 : 0.8, ctx.currentTime, 0.1);
+      lfoGain.gain.setTargetAtTime(filter.frequency.value * 0.32, ctx.currentTime, 0.1);
+
+      if (currentTexture === 'dark_void') {
+        const sub = ctx.createOscillator();
+        sub.type = 'sine';
+        sub.frequency.setValueAtTime(fundamental * 0.5, ctx.currentTime);
+
+        const body = ctx.createOscillator();
+        body.type = 'triangle';
+        body.frequency.setValueAtTime(fundamental, ctx.currentTime);
+
+        sub.connect(filter);
+        body.connect(filter);
+        sub.start();
+        body.start();
+        activeOscillators.push(sub, body);
+      } else if (currentTexture === 'crystal_shimmer') {
+        const freqs = [fundamental, fundamental * 1.5, fundamental * 2.0, fundamental * 3.0];
+        const gains = [0.45, 0.25, 0.18, 0.10];
+        freqs.forEach((f, idx) => {
+          const osc = ctx.createOscillator();
+          const g = ctx.createGain();
+          osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
+          osc.frequency.setValueAtTime(f, ctx.currentTime);
+          g.gain.setValueAtTime(gains[idx], ctx.currentTime);
+          osc.connect(g);
+          g.connect(filter);
+          osc.start();
+          activeOscillators.push(osc);
+          activeNodes.push(g);
+        });
+      } else if (currentTexture === 'tibetan_om') {
+        const freqs = [fundamental, fundamental * 2.76, fundamental * 5.4];
+        const gains = [0.55, 0.22, 0.08];
+        freqs.forEach((f, idx) => {
+          const osc = ctx.createOscillator();
+          const g = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(f, ctx.currentTime);
+          g.gain.setValueAtTime(gains[idx], ctx.currentTime);
+          osc.connect(g);
+          g.connect(filter);
+          osc.start();
+          activeOscillators.push(osc);
+          activeNodes.push(g);
+        });
+      } else {
+        // 'warm_pad' & 'solar_wind': Triad cluster with stereo detuning
+        const oscL = ctx.createOscillator();
+        const oscC = ctx.createOscillator();
+        const oscR = ctx.createOscillator();
+
+        oscL.type = 'sawtooth';
+        oscL.frequency.setValueAtTime(fundamental, ctx.currentTime);
+        oscL.detune.setValueAtTime(-detuneSpread, ctx.currentTime);
+
+        oscC.type = 'triangle';
+        oscC.frequency.setValueAtTime(fundamental, ctx.currentTime);
+
+        oscR.type = 'sawtooth';
+        oscR.frequency.setValueAtTime(fundamental, ctx.currentTime);
+        oscR.detune.setValueAtTime(detuneSpread, ctx.currentTime);
+
+        const pannerL = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+        const pannerR = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+
+        if (pannerL && pannerR) {
+          pannerL.pan.setValueAtTime(-0.6, ctx.currentTime);
+          pannerR.pan.setValueAtTime(0.6, ctx.currentTime);
+          oscL.connect(pannerL);
+          pannerL.connect(filter);
+          oscR.connect(pannerR);
+          pannerR.connect(filter);
+          activeNodes.push(pannerL, pannerR);
+        } else {
+          oscL.connect(filter);
+          oscR.connect(filter);
+        }
+        oscC.connect(filter);
+
+        oscL.start();
+        oscC.start();
+        oscR.start();
+        activeOscillators.push(oscL, oscC, oscR);
+      }
+    };
+
+    // Initial build
+    buildTexture();
+
+    const updateDroneParams = (t: ChannelTrack) => {
+      const textureChanged = t.droneTexture && t.droneTexture !== currentTexture;
+      if (t.droneTexture) currentTexture = t.droneTexture;
+      if (t.droneRootNote) currentRootNote = t.droneRootNote;
+      if (typeof t.droneOctave === 'number') currentOctave = t.droneOctave;
+      if (typeof t.droneDetune === 'number') currentDetune = t.droneDetune;
+
+      if (textureChanged) {
+        buildTexture();
+      } else {
+        const baseFreq = NOTE_BASE_FREQ[currentRootNote] || 73.42;
+        const octaveMult = currentOctave === 1 ? 0.5 : currentOctave === 3 ? 2.0 : 1.0;
+        const newFund = baseFreq * octaveMult;
+        const detuneSpread = currentDetune * 25;
 
         activeOscillators.forEach((osc, idx) => {
           try {
-            osc.frequency.setTargetAtTime(newFund * (idx === 1 ? 1.5 : 1.0), ctx.currentTime, 0.1);
+            if (currentTexture === 'dark_void') {
+              osc.frequency.setTargetAtTime(newFund * (idx === 0 ? 0.5 : 1.0), ctx.currentTime, 0.08);
+            } else if (currentTexture === 'crystal_shimmer') {
+              const multipliers = [1.0, 1.5, 2.0, 3.0];
+              osc.frequency.setTargetAtTime(newFund * (multipliers[idx] || 1.0), ctx.currentTime, 0.08);
+            } else if (currentTexture === 'tibetan_om') {
+              const multipliers = [1.0, 2.76, 5.4];
+              osc.frequency.setTargetAtTime(newFund * (multipliers[idx] || 1.0), ctx.currentTime, 0.08);
+            } else {
+              osc.frequency.setTargetAtTime(newFund, ctx.currentTime, 0.08);
+              if (idx === 0) osc.detune.setTargetAtTime(-detuneSpread, ctx.currentTime, 0.08);
+              if (idx === 2) osc.detune.setTargetAtTime(detuneSpread, ctx.currentTime, 0.08);
+            }
           } catch (e) {}
         });
+      }
+    };
+
+    return {
+      cleanup: () => {
+        try {
+          destroyCurrentTexture();
+          lfo.stop();
+          lfo.disconnect();
+          lfoGain.disconnect();
+          filter.disconnect();
+          masterDroneGain.disconnect();
+        } catch (e) {}
       },
+      updateParams: updateDroneParams,
     };
   }
 

@@ -164,7 +164,7 @@ export const ChannelStrip: React.FC<ChannelStripProps> = ({
   const [hasVideoError, setHasVideoError] = useState(Boolean(track.isUnavailable));
   const [isAutoFixing, setIsAutoFixing] = useState(false);
   const [isReplaceMenuOpen, setIsReplaceMenuOpen] = useState(false);
-  const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [isConfigOpen, setIsConfigOpen] = useState(true);
   const animRef = useRef<number | null>(null);
 
   // Bus calculation
@@ -368,7 +368,7 @@ export const ChannelStrip: React.FC<ChannelStripProps> = ({
   };
 
   return (
-    <div className="relative w-44 sm:w-48 md:w-52 shrink-0 h-auto min-h-[470px] rounded-2xl bg-slate-900/95 border border-slate-800/90 p-2.5 flex flex-col justify-between shadow-2xl hover:border-slate-700/80 transition-all backdrop-blur-md">
+    <div className="relative w-56 sm:w-60 md:w-64 shrink-0 h-auto rounded-2xl bg-slate-900/95 border border-slate-800/90 p-2.5 flex flex-col justify-between shadow-2xl hover:border-slate-700/80 transition-all backdrop-blur-md">
       {/* Top Track Color Accent Strip */}
       <div
         className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl opacity-90 shadow-sm"
@@ -493,15 +493,15 @@ export const ChannelStrip: React.FC<ChannelStripProps> = ({
           </div>
 
           <div className="flex items-center gap-0.5">
-            {(track.type === 'midi_random' || track.type === 'drone_ambient') && (
+            {(track.type === 'midi_random' || track.type === 'drone_ambient' || track.type === 'synthesizer') && (
               <button
                 onClick={() => setIsConfigOpen(!isConfigOpen)}
-                className={`p-1 rounded text-[9px] transition-colors cursor-pointer ${
+                className={`p-1 rounded text-[9px] transition-all cursor-pointer ${
                   isConfigOpen
-                    ? 'bg-amber-500 text-slate-950 font-bold'
+                    ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/30 ring-1 ring-amber-400'
                     : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
                 }`}
-                title="Ajustar parámetros del instrumento"
+                title={isConfigOpen ? 'Ocultar parámetros' : 'Ajustar parámetros del instrumento'}
               >
                 <Sliders className="w-2.5 h-2.5" />
               </button>
@@ -600,197 +600,284 @@ export const ChannelStrip: React.FC<ChannelStripProps> = ({
         )}
       </div>
 
-      {/* 2B. Dedicated Instrument Editors for MIDI Random & Drone Ambient */}
-      {track.type === 'midi_random' && (
-        <div className="my-1 p-2 rounded-xl bg-amber-950/30 border border-amber-500/30 text-[9px] space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-amber-300 flex items-center gap-1">
-              <Music className="w-2.5 h-2.5" /> Generador MIDI
-            </span>
-            <button
-              onClick={handleTriggerChord}
-              className="px-1.5 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[8px] flex items-center gap-0.5 cursor-pointer shadow-sm transition-transform active:scale-95"
-              title="Tocar acorde ahora"
-            >
-              <Play className="w-2 h-2 fill-current" />
-              <span>Acorde</span>
-            </button>
-          </div>
+      {/* 2B. Dedicated Instrument Editors for MIDI, Drone & Synthesizer (Collapsible) */}
+      {isConfigOpen && (
+        <>
+          {track.type === 'midi_random' && (
+            <div className="my-1 p-2 rounded-xl bg-amber-950/40 border border-amber-500/40 text-[9px] space-y-1.5 shadow-inner">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-amber-300 flex items-center gap-1">
+                  <Music className="w-2.5 h-2.5" /> Teclado / MIDI
+                </span>
+                <button
+                  onClick={handleTriggerChord}
+                  className="px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[8px] flex items-center gap-1 cursor-pointer shadow-sm transition-transform active:scale-95"
+                  title="Tocar acorde ahora"
+                >
+                  <Play className="w-2 h-2 fill-current" />
+                  <span>Tocar Acorde</span>
+                </button>
+              </div>
 
-          <div className="grid grid-cols-2 gap-1 text-[8px]">
-            <div>
-              <span className="text-slate-400 block text-[7px] uppercase">Timbre:</span>
-              <select
-                value={track.midiSoundPreset || 'rhodes'}
-                onChange={(e) => onUpdate({ midiSoundPreset: e.target.value as MidiSoundPreset })}
-                className="w-full bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-amber-200 cursor-pointer"
-              >
-                <option value="rhodes">Rhodes EP</option>
-                <option value="juno_poly">Juno Poly</option>
-                <option value="zen_harp">Arpa Zen</option>
-              </select>
+              <div className="grid grid-cols-2 gap-1 text-[8px]">
+                <div>
+                  <span className="text-slate-400 block text-[7px] uppercase font-semibold">Timbre:</span>
+                  <select
+                    value={track.midiSoundPreset || 'rhodes'}
+                    onChange={(e) => onUpdate({ midiSoundPreset: e.target.value as MidiSoundPreset })}
+                    className="w-full bg-slate-900 border border-slate-700/80 rounded px-1.5 py-0.5 text-amber-200 cursor-pointer focus:outline-none focus:border-amber-400"
+                  >
+                    <option value="rhodes">Rhodes EP</option>
+                    <option value="juno_poly">Juno Poly</option>
+                    <option value="zen_harp">Arpa Zen</option>
+                  </select>
+                </div>
+
+                <div>
+                  <span className="text-slate-400 block text-[7px] uppercase font-semibold">Modo:</span>
+                  <select
+                    value={track.midiPlayMode || 'chords'}
+                    onChange={(e) => onUpdate({ midiPlayMode: e.target.value as MidiPlayMode })}
+                    className="w-full bg-slate-900 border border-slate-700/80 rounded px-1.5 py-0.5 text-amber-200 cursor-pointer focus:outline-none focus:border-amber-400"
+                  >
+                    <option value="chords">Acordes</option>
+                    <option value="arpeggio">Arpegio</option>
+                    <option value="melody">Melodía</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <span className="text-slate-400 block text-[7px] uppercase font-semibold">Escala Musical:</span>
+                <select
+                  value={track.midiScale || 'pentatonic_minor'}
+                  onChange={(e) => onUpdate({ midiScale: e.target.value as MidiScale })}
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded px-1.5 py-0.5 text-amber-200 cursor-pointer focus:outline-none focus:border-amber-400"
+                >
+                  <option value="pentatonic_minor">Pentatónica Menor</option>
+                  <option value="pentatonic_major">Pentatónica Mayor</option>
+                  <option value="natural_minor">Menor Natural</option>
+                  <option value="dorian">Dórica Mística</option>
+                  <option value="lydian">Lidia Etérea</option>
+                  <option value="hirajoshi">Hirajoshi Japonesa</option>
+                </select>
+              </div>
+
+              {/* Tempo BPM Slider */}
+              <div className="space-y-0.5 pt-0.5">
+                <div className="flex items-center justify-between text-[7px] font-mono text-slate-400">
+                  <span className="uppercase">Tempo BPM:</span>
+                  <span className="font-bold text-amber-300">{track.midiBpm || 72} BPM</span>
+                </div>
+                <input
+                  type="range"
+                  min="40"
+                  max="140"
+                  step="1"
+                  value={track.midiBpm || 72}
+                  onChange={(e) => onUpdate({ midiBpm: parseInt(e.target.value, 10) })}
+                  className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-amber-400"
+                />
+              </div>
             </div>
+          )}
 
-            <div>
-              <span className="text-slate-400 block text-[7px] uppercase">Modo:</span>
-              <select
-                value={track.midiPlayMode || 'chords'}
-                onChange={(e) => onUpdate({ midiPlayMode: e.target.value as MidiPlayMode })}
-                className="w-full bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-amber-200 cursor-pointer"
-              >
-                <option value="chords">Acordes</option>
-                <option value="arpeggio">Arpegio</option>
-                <option value="melody">Melodía</option>
-              </select>
+          {track.type === 'drone_ambient' && (
+            <div className="my-1 p-2 rounded-xl bg-indigo-950/40 border border-indigo-500/40 text-[9px] space-y-1.5 shadow-inner">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-indigo-300 flex items-center gap-1">
+                  <Disc className="w-2.5 h-2.5" /> Drone Armónico
+                </span>
+                <span className="font-mono text-[8px] font-bold text-indigo-300 px-1 py-0.5 rounded bg-indigo-900/60 border border-indigo-700/50">
+                  {track.droneRootNote || 'D'}{track.droneOctave || 2}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1 text-[8px]">
+                <div>
+                  <span className="text-slate-400 block text-[7px] uppercase font-semibold">Tono Raíz:</span>
+                  <select
+                    value={track.droneRootNote || 'D'}
+                    onChange={(e) => onUpdate({ droneRootNote: e.target.value as DroneRootNote })}
+                    className="w-full bg-slate-900 border border-slate-700/80 rounded px-1.5 py-0.5 text-indigo-200 cursor-pointer font-bold focus:outline-none focus:border-indigo-400"
+                  >
+                    {['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'].map((note) => (
+                      <option key={note} value={note}>
+                        {note}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <span className="text-slate-400 block text-[7px] uppercase font-semibold">Octava:</span>
+                  <select
+                    value={track.droneOctave || 2}
+                    onChange={(e) => onUpdate({ droneOctave: Number(e.target.value) as 1 | 2 | 3 })}
+                    className="w-full bg-slate-900 border border-slate-700/80 rounded px-1.5 py-0.5 text-indigo-200 cursor-pointer focus:outline-none focus:border-indigo-400"
+                  >
+                    <option value={1}>Sub (1)</option>
+                    <option value={2}>Media (2)</option>
+                    <option value={3}>Alta (3)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <span className="text-slate-400 block text-[7px] uppercase font-semibold">Textura Sonora:</span>
+                <select
+                  value={track.droneTexture || 'warm_pad'}
+                  onChange={(e) => onUpdate({ droneTexture: e.target.value as DroneTexture })}
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded px-1.5 py-0.5 text-indigo-200 cursor-pointer focus:outline-none focus:border-indigo-400"
+                >
+                  <option value="warm_pad">Pad Cálido Analógico</option>
+                  <option value="crystal_shimmer">Shimmer Cristalino</option>
+                  <option value="dark_void">Vacío Profundo (Dark Void)</option>
+                  <option value="tibetan_om">Om Tibetano 108Hz</option>
+                  <option value="solar_wind">Viento Solar Etéreo</option>
+                </select>
+              </div>
+
+              {/* Detune Cents Slider */}
+              <div className="space-y-0.5 pt-0.5">
+                <div className="flex items-center justify-between text-[7px] font-mono text-slate-400">
+                  <span className="uppercase">Espaciado Detune:</span>
+                  <span className="font-bold text-indigo-300">{track.droneDetune || 7} cents</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="25"
+                  step="1"
+                  value={track.droneDetune || 7}
+                  onChange={(e) => onUpdate({ droneDetune: parseInt(e.target.value, 10) })}
+                  className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-indigo-400"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
-          <div>
-            <span className="text-slate-400 block text-[7px] uppercase">Escala:</span>
-            <select
-              value={track.midiScale || 'pentatonic_minor'}
-              onChange={(e) => onUpdate({ midiScale: e.target.value as MidiScale })}
-              className="w-full bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-amber-200 cursor-pointer"
-            >
-              <option value="pentatonic_minor">Pentatónica Menor</option>
-              <option value="pentatonic_major">Pentatónica Mayor</option>
-              <option value="natural_minor">Menor Natural</option>
-              <option value="dorian">Dórica Mística</option>
-              <option value="lydian">Lidia Etérea</option>
-              <option value="hirajoshi">Hirajoshi Japonesa</option>
-            </select>
-          </div>
-        </div>
+          {track.type === 'synthesizer' && (
+            <div className="my-1 p-2 rounded-xl bg-cyan-950/40 border border-cyan-500/40 text-[9px] space-y-1.5 shadow-inner">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-cyan-300 flex items-center gap-1">
+                  <Radio className="w-2.5 h-2.5" /> Sintetizador Procedural
+                </span>
+                <span className="font-mono text-[7px] text-cyan-400 uppercase font-semibold">DSP</span>
+              </div>
+
+              <div>
+                <span className="text-slate-400 block text-[7px] uppercase font-semibold">Tipo de Generador:</span>
+                <select
+                  value={track.synthType || 'brown_noise'}
+                  onChange={(e) =>
+                    onUpdate({
+                      synthType: e.target.value as any,
+                      name:
+                        e.target.value === 'brown_noise'
+                          ? 'Ruido Marrón'
+                          : e.target.value === 'pink_noise'
+                          ? 'Ruido Rosa'
+                          : e.target.value === 'binaural_alpha'
+                          ? 'Ondas Alfa 10Hz'
+                          : e.target.value === 'binaural_theta'
+                          ? 'Ondas Theta 6Hz'
+                          : e.target.value === 'sub_drone'
+                          ? 'Sub Drone 55Hz'
+                          : 'Crepitar Vinilo',
+                    })
+                  }
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded px-1.5 py-0.5 text-cyan-200 cursor-pointer focus:outline-none focus:border-cyan-400"
+                >
+                  <option value="brown_noise">Ruido Marrón (Brownian)</option>
+                  <option value="pink_noise">Ruido Rosa (Pink)</option>
+                  <option value="binaural_alpha">Ondas Alfa 10Hz (Enfoque)</option>
+                  <option value="binaural_theta">Ondas Theta 6Hz (Meditación)</option>
+                  <option value="sub_drone">Sub Drone 55Hz (Tierra)</option>
+                  <option value="vinyl_crackle">Crepitar Vinilo Vintage</option>
+                </select>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
-      {track.type === 'drone_ambient' && (
-        <div className="my-1 p-2 rounded-xl bg-indigo-950/30 border border-indigo-500/30 text-[9px] space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-indigo-300 flex items-center gap-1">
-              <Disc className="w-2.5 h-2.5" /> Drone Armónico
-            </span>
-            <span className="font-mono text-[8px] text-indigo-400">
-              {track.droneRootNote || 'D'}
-              {track.droneOctave || 2}
-            </span>
-          </div>
+      {/* 3. Ergonomic Side-by-side DSP Knobs (Left) & Studio Volume Fader (Right) */}
+      <div className="flex items-center gap-1.5 bg-slate-950/70 p-1.5 rounded-xl border border-slate-800/80 my-1">
+        {/* Left: 2x2 Rotary DSP Knobs */}
+        <div className="grid grid-cols-2 gap-x-1 gap-y-1 flex-1">
+          <RotaryKnob
+            label="Pan"
+            value={track.pan}
+            min={-1}
+            max={1}
+            defaultValue={0}
+            step={0.02}
+            size={30}
+            compact={true}
+            displayValue={formatPan(track.pan)}
+            color={assignedBus?.color || track.color || '#06B6D4'}
+            onChange={(pan) => onUpdate({ pan })}
+          />
 
-          <div className="grid grid-cols-2 gap-1 text-[8px]">
-            <div>
-              <span className="text-slate-400 block text-[7px] uppercase">Tono Raíz:</span>
-              <select
-                value={track.droneRootNote || 'D'}
-                onChange={(e) => onUpdate({ droneRootNote: e.target.value as DroneRootNote })}
-                className="w-full bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-indigo-200 cursor-pointer font-bold"
-              >
-                {['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'].map((note) => (
-                  <option key={note} value={note}>
-                    {note}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <RotaryKnob
+            label="Filtro"
+            value={track.filterCutoff}
+            min={200}
+            max={20000}
+            defaultValue={20000}
+            step={100}
+            size={30}
+            compact={true}
+            displayValue={formatCutoff(track.filterCutoff)}
+            color="#F59E0B"
+            onChange={(filterCutoff) => onUpdate({ filterCutoff })}
+          />
 
-            <div>
-              <span className="text-slate-400 block text-[7px] uppercase">Octava:</span>
-              <select
-                value={track.droneOctave || 2}
-                onChange={(e) => onUpdate({ droneOctave: Number(e.target.value) as 1 | 2 | 3 })}
-                className="w-full bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-indigo-200 cursor-pointer"
-              >
-                <option value={1}>Sub (1)</option>
-                <option value={2}>Media (2)</option>
-                <option value={3}>Alta (3)</option>
-              </select>
-            </div>
-          </div>
+          <RotaryKnob
+            label="Reverb"
+            value={track.reverbSend ?? 0.2}
+            min={0}
+            max={1}
+            defaultValue={0.2}
+            step={0.05}
+            size={30}
+            compact={true}
+            displayValue={`${Math.round((track.reverbSend ?? 0.2) * 100)}%`}
+            color="#10B981"
+            onChange={(reverbSend) => onUpdate({ reverbSend })}
+          />
 
-          <div>
-            <span className="text-slate-400 block text-[7px] uppercase">Textura:</span>
-            <select
-              value={track.droneTexture || 'warm_pad'}
-              onChange={(e) => onUpdate({ droneTexture: e.target.value as DroneTexture })}
-              className="w-full bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-indigo-200 cursor-pointer"
-            >
-              <option value="warm_pad">Pad Cálido Analógico</option>
-              <option value="crystal_shimmer">Shimmer Cristalino</option>
-              <option value="dark_void">Vacío Profundo (Dark Void)</option>
-              <option value="tibetan_om">Om Tibetano 108Hz</option>
-              <option value="solar_wind">Viento Solar Etéreo</option>
-            </select>
-          </div>
+          <RotaryKnob
+            label="Delay"
+            value={track.delaySend || 0}
+            min={0}
+            max={1}
+            defaultValue={0}
+            step={0.05}
+            size={30}
+            compact={true}
+            displayValue={`${Math.round((track.delaySend || 0) * 100)}%`}
+            color="#8B5CF6"
+            onChange={(delaySend) => onUpdate({ delaySend })}
+          />
         </div>
-      )}
 
-      {/* 3. 2x2 Knobs: Pan, Filtro, Reverb (Independent), Delay */}
-      <div className="grid grid-cols-2 gap-x-1 gap-y-1.5 bg-slate-950/70 p-1.5 rounded-xl border border-slate-800/80 my-1">
-        <RotaryKnob
-          label="Pan"
-          value={track.pan}
-          min={-1}
-          max={1}
-          defaultValue={0}
-          step={0.02}
-          size={34}
-          compact={true}
-          displayValue={formatPan(track.pan)}
-          color={assignedBus?.color || track.color || '#06B6D4'}
-          onChange={(pan) => onUpdate({ pan })}
-        />
+        {/* Vertical Separator */}
+        <div className="w-[1px] self-stretch bg-slate-800/90 my-0.5" />
 
-        <RotaryKnob
-          label="Filtro"
-          value={track.filterCutoff}
-          min={200}
-          max={20000}
-          defaultValue={20000}
-          step={100}
-          size={34}
-          compact={true}
-          displayValue={formatCutoff(track.filterCutoff)}
-          color="#F59E0B"
-          onChange={(filterCutoff) => onUpdate({ filterCutoff })}
-        />
-
-        <RotaryKnob
-          label="Reverb"
-          value={track.reverbSend ?? 0.2}
-          min={0}
-          max={1}
-          defaultValue={0.2}
-          step={0.05}
-          size={34}
-          compact={true}
-          displayValue={`${Math.round((track.reverbSend ?? 0.2) * 100)}%`}
-          color="#10B981"
-          onChange={(reverbSend) => onUpdate({ reverbSend })}
-        />
-
-        <RotaryKnob
-          label="Delay"
-          value={track.delaySend || 0}
-          min={0}
-          max={1}
-          defaultValue={0}
-          step={0.05}
-          size={34}
-          compact={true}
-          displayValue={`${Math.round((track.delaySend || 0) * 100)}%`}
-          color="#8B5CF6"
-          onChange={(delaySend) => onUpdate({ delaySend })}
-        />
-      </div>
-
-      {/* 4. Precision Fader Bay with Radiant Segmented LED Ladder */}
-      <div className="pt-0.5">
-        <StudioFader
-          volume={track.volume}
-          vuLevel={vuLevel}
-          muted={isEffectivelyMuted}
-          isSoloBlocked={isEffectivelySoloBlocked}
-          color={assignedBus?.color || track.color || '#06B6D4'}
-          onChange={(volume) => onUpdate({ volume })}
-        />
+        {/* Right: Studio Precision Volume Fader & VU Meter */}
+        <div className="w-16 shrink-0 flex flex-col items-center">
+          <StudioFader
+            volume={track.volume}
+            vuLevel={vuLevel}
+            muted={isEffectivelyMuted}
+            isSoloBlocked={isEffectivelySoloBlocked}
+            color={assignedBus?.color || track.color || '#06B6D4'}
+            onChange={(volume) => onUpdate({ volume })}
+            compact={true}
+          />
+        </div>
       </div>
 
       {/* Persistent Offscreen YouTube Audio Player */}

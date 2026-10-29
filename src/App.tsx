@@ -117,6 +117,14 @@ export default function App() {
     setIsSearchOpen(true);
   };
 
+  // Initial sync of master levels to audio engine and youtube manager
+  useEffect(() => {
+    audioEngine.setMasterVolume(activeProject.masterVolume ?? 0.85);
+    youtubeManager.setMasterVolume(activeProject.masterVolume ?? 0.85);
+    audioEngine.setMasterReverb(activeProject.masterReverb ?? 0.3);
+    audioEngine.setMasterFilterCutoff(activeProject.masterFilter ?? 20000);
+  }, []);
+
   // Global tactile keyboard shortcuts for studio workflow
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -374,6 +382,12 @@ export default function App() {
 
     setActiveProject(newProject);
 
+    // Sync master effects and master volume
+    audioEngine.setMasterVolume(newProject.masterVolume ?? 0.85);
+    youtubeManager.setMasterVolume(newProject.masterVolume ?? 0.85);
+    audioEngine.setMasterReverb(newProject.masterReverb ?? 0.3);
+    audioEngine.setMasterFilterCutoff(newProject.masterFilter ?? 20000);
+
     // Sync new channels (both Web Audio synths, drones, MIDI and YouTube trackers)
     newProject.channels.forEach((track) => {
       audioEngine.syncChannel(track, newProject.channels, newProject.buses);
@@ -391,6 +405,24 @@ export default function App() {
       const nextChannels = prev.channels.map((ch) =>
         ch.id === channelId ? { ...ch, ...updated } : ch
       );
+      const target = nextChannels.find((ch) => ch.id === channelId);
+      if (target) {
+        audioEngine.syncChannel(target, nextChannels, prev.buses);
+
+        // Calculate effective bus multiplier for YouTube volume
+        let busMultiplier = 1.0;
+        if (target.busId && prev.buses) {
+          const bus = prev.buses.find((b) => b.id === target.busId);
+          if (bus) {
+            if (bus.muted) busMultiplier = 0;
+            else busMultiplier = bus.volume;
+          }
+        }
+        if (target.type === 'youtube_video') {
+          const effectiveVol = (target.muted ? 0 : target.volume) * busMultiplier;
+          youtubeManager.setVolume(target.id, effectiveVol);
+        }
+      }
       return {
         ...prev,
         updatedAt: new Date().toISOString(),
@@ -444,10 +476,28 @@ export default function App() {
   };
 
   const handleUpdateBus = (busId: string, updates: Partial<AudioBusGroup>) => {
-    setActiveProject((prev) => ({
-      ...prev,
-      buses: (prev.buses || []).map((b) => (b.id === busId ? { ...b, ...updates } : b)),
-    }));
+    setActiveProject((prev) => {
+      const nextBuses = (prev.buses || []).map((b) => (b.id === busId ? { ...b, ...updates } : b));
+      // Re-sync all channels associated with or affected by bus updates (solo/mute/volume)
+      prev.channels.forEach((ch) => {
+        audioEngine.syncChannel(ch, prev.channels, nextBuses);
+        if (ch.type === 'youtube_video') {
+          let busMul = 1.0;
+          if (ch.busId) {
+            const b = nextBuses.find((x) => x.id === ch.busId);
+            if (b) {
+              if (b.muted) busMul = 0;
+              else busMul = b.volume;
+            }
+          }
+          youtubeManager.setVolume(ch.id, (ch.muted ? 0 : ch.volume) * busMul);
+        }
+      });
+      return {
+        ...prev,
+        buses: nextBuses,
+      };
+    });
   };
 
   const handleRemoveBus = (busId: string) => {
@@ -1039,7 +1089,7 @@ export default function App() {
                           ))}
 
                         {/* Botón + Añadir Canal */}
-                        <div className="w-44 sm:w-48 shrink-0 min-h-[470px] rounded-2xl border-2 border-dashed border-slate-800 hover:border-cyan-500/60 bg-slate-900/40 hover:bg-slate-900/70 transition-all p-3 flex flex-col items-center justify-center text-center group shadow-lg">
+                        <div className="w-56 sm:w-60 md:w-64 shrink-0 rounded-2xl border-2 border-dashed border-slate-800 hover:border-cyan-500/60 bg-slate-900/40 hover:bg-slate-900/70 transition-all p-3 flex flex-col items-center justify-center text-center group shadow-lg min-h-[280px]">
                           <button
                             onClick={() => setIsSearchOpen(true)}
                             className="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700/80 group-hover:border-cyan-400 group-hover:bg-cyan-950/50 flex items-center justify-center mb-2 transition-all shadow-md group-hover:scale-105 cursor-pointer"
@@ -1106,9 +1156,19 @@ export default function App() {
                     masterFilter={activeProject.masterFilter}
                     isPlaying={isPlaying}
                     isAiBalancing={isAiBalancing}
-                    onVolumeChange={(masterVolume) => setActiveProject((p) => ({ ...p, masterVolume }))}
-                    onReverbChange={(masterReverb) => setActiveProject((p) => ({ ...p, masterReverb }))}
-                    onFilterChange={(masterFilter) => setActiveProject((p) => ({ ...p, masterFilter }))}
+                    onVolumeChange={(masterVolume) => {
+                      audioEngine.setMasterVolume(masterVolume);
+                      youtubeManager.setMasterVolume(masterVolume);
+                      setActiveProject((p) => ({ ...p, masterVolume }));
+                    }}
+                    onReverbChange={(masterReverb) => {
+                      audioEngine.setMasterReverb(masterReverb);
+                      setActiveProject((p) => ({ ...p, masterReverb }));
+                    }}
+                    onFilterChange={(masterFilter) => {
+                      audioEngine.setMasterFilterCutoff(masterFilter);
+                      setActiveProject((p) => ({ ...p, masterFilter }));
+                    }}
                     onTogglePlay={handleTogglePlay}
                     onGlobalStop={handleGlobalStop}
                     onTriggerAiBalance={handleTriggerAiBalance}
@@ -1127,7 +1187,11 @@ export default function App() {
             masterVolume={activeProject.masterVolume}
             activeTimer={activeTimer}
             onTogglePlay={handleTogglePlay}
-            onVolumeChange={(masterVolume) => setActiveProject((p) => ({ ...p, masterVolume }))}
+            onVolumeChange={(masterVolume) => {
+              audioEngine.setMasterVolume(masterVolume);
+              youtubeManager.setMasterVolume(masterVolume);
+              setActiveProject((p) => ({ ...p, masterVolume }));
+            }}
             onOpenTimerModal={() => setIsTimerModalOpen(true)}
             onExitZen={() => setCurrentView('mixer')}
           />

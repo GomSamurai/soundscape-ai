@@ -43,7 +43,8 @@ export interface VisualizerSettings {
   customPrimary?: string;
   customSecondary?: string;
   customAccent?: string;
-  gain: number; // 0.5 to 3.0 (visual amplification factor)
+  gain: number; // 0.1 to 3.0 (visual amplification factor / sensitivity)
+  smoothing?: number; // 0.40 to 0.98 (anti-jitter temporal smoothing factor)
   decaySpeed: DecaySpeed;
   barsCount: BarsResolution;
   peakHold: boolean;

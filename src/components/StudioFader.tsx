@@ -7,6 +7,7 @@ interface StudioFaderProps {
   isSoloBlocked?: boolean;
   color?: string;
   trackLabel?: string;
+  compact?: boolean;
   onChange: (value: number) => void;
 }
 
@@ -18,6 +19,7 @@ export const StudioFader: React.FC<StudioFaderProps> = ({
   muted = false,
   isSoloBlocked = false,
   color = '#06B6D4',
+  compact = false,
   onChange,
 }) => {
   // Convert 0..1.2 volume to dB string
@@ -47,7 +49,11 @@ export const StudioFader: React.FC<StudioFaderProps> = ({
       </div>
 
       {/* Main Fader Bay: Scale + Fader + LED Meter */}
-      <div className="relative w-full h-36 bg-slate-950 rounded-xl border border-slate-800/90 p-2 flex items-center justify-between shadow-inner">
+      <div
+        className={`relative w-full ${
+          compact ? 'h-[118px] p-1.5' : 'h-36 p-2'
+        } bg-slate-950 rounded-xl border border-slate-800/90 flex items-center justify-between shadow-inner`}
+      >
         {/* Scale labels on left */}
         <div className="flex flex-col justify-between h-full text-[7px] font-mono text-slate-500 select-none py-0.5 w-3.5 text-right pr-0.5">
           <span>+6</span>

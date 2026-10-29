@@ -42,6 +42,7 @@ class AudioEngine {
   private youtubeTrackingBus: GainNode | null = null;
   private reverbNode: ConvolverNode | null = null;
   private reverbMasterGain: GainNode | null = null;
+  private masterReverbSend: GainNode | null = null;
   private masterDelayNode: DelayNode | null = null;
   private masterDelayFeedback: GainNode | null = null;
   private masterDelayGain: GainNode | null = null;
@@ -136,22 +137,36 @@ class AudioEngine {
     this.reverbMasterGain = this.ctx.createGain();
     this.reverbMasterGain.gain.value = 0.35;
 
+    // Master Reverb Send from masterFilter
+    this.masterReverbSend = this.ctx.createGain();
+    this.masterReverbSend.gain.value = 0.25;
+    this.masterFilter.connect(this.masterReverbSend);
+    this.masterReverbSend.connect(this.reverbNode);
+
     // Media stream destination for recording mixdowns
     this.mediaDest = this.ctx.createMediaStreamDestination();
 
     // Wiring master graph:
-    // Reverb -> reverbMasterGain -> masterFilter
+    // Reverb wet out -> reverbMasterGain -> masterLowEq
     this.reverbNode.connect(this.reverbMasterGain);
-    this.reverbMasterGain.connect(this.masterFilter);
+    this.reverbMasterGain.connect(this.masterLowEq);
 
-    // MasterDelay -> masterDelayGain -> masterFilter
-    this.masterDelayGain.connect(this.masterFilter);
+    // Master Delay: input from masterFilter, wet out to masterLowEq
+    this.masterFilter.connect(this.masterDelayNode);
+    this.masterDelayGain.connect(this.masterLowEq);
 
-    // Filter -> LowEq -> MidEq -> HighEq -> Warmth -> Compressor -> Gain -> Destination & Analyser
+    // Direct dry signal: Filter -> LowEq -> MidEq -> HighEq
     this.masterFilter.connect(this.masterLowEq);
     this.masterLowEq.connect(this.masterMidEq);
     this.masterMidEq.connect(this.masterHighEq);
+
+    // HighEq -> Compressor (Dry path)
     this.masterHighEq.connect(this.masterCompressor);
+
+    // HighEq -> Warmth Shaper -> Warmth Gain -> Compressor (Parallel Tape Saturation)
+    this.masterHighEq.connect(this.masterWarmthShaper);
+    this.masterWarmthShaper.connect(this.masterWarmthGain);
+    this.masterWarmthGain.connect(this.masterCompressor);
 
     this.masterCompressor.connect(this.masterGain);
 
@@ -200,6 +215,9 @@ class AudioEngine {
     if (!this.reverbMasterGain || !this.ctx) return;
     const clamped = Math.max(0, Math.min(1.0, value));
     this.reverbMasterGain.gain.setTargetAtTime(clamped, this.ctx.currentTime, 0.05);
+    if (this.masterReverbSend) {
+      this.masterReverbSend.gain.setTargetAtTime(clamped * 0.6, this.ctx.currentTime, 0.05);
+    }
   }
 
   public setMasterFilterCutoff(value: number) {
@@ -514,14 +532,25 @@ class AudioEngine {
         () => this.isPlaying
       );
       nodes.cleanup = res.cleanup;
+      nodes.updateParams = res.updateParams;
       this.midiInstruments.set(track.id, res.triggerChord);
     } else if (track.type === 'drone_ambient') {
       const res = GenerativeAudioService.createDroneAmbient(track, nodes.filterNode, ctx);
       nodes.cleanup = res.cleanup;
       nodes.updateParams = res.updateParams;
     } else if (track.type === 'synthesizer' && track.synthType) {
-      const synthCleanup = this.createProceduralSynth(track, nodes.filterNode, ctx);
-      nodes.cleanup = synthCleanup;
+      let currentSynthCleanup = this.createProceduralSynth(track, nodes.filterNode, ctx);
+      nodes.cleanup = () => {
+        if (currentSynthCleanup) currentSynthCleanup();
+      };
+      let currentSynthType = track.synthType;
+      nodes.updateParams = (updatedTrack: ChannelTrack) => {
+        if (updatedTrack.synthType && updatedTrack.synthType !== currentSynthType) {
+          currentSynthType = updatedTrack.synthType;
+          if (currentSynthCleanup) currentSynthCleanup();
+          currentSynthCleanup = this.createProceduralSynth(updatedTrack, nodes.filterNode, ctx);
+        }
+      };
     } else if ((track.type === 'audio_url' || track.type === 'video_url') && track.sourceUrl) {
       const mediaEl = track.type === 'video_url' ? document.createElement('video') : new Audio();
       mediaEl.crossOrigin = 'anonymous';

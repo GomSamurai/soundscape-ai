@@ -480,25 +480,46 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
           const bandEnergy = binCount > 1 ? bandPeak * 0.75 + (bandSum / binCount) * 0.25 : bandPeak;
           targetVal = Math.min(255, bandEnergy * gainFactor);
         } else if (activeYtTracks.length > 0) {
-          // Acoustic energy synthesis for active YouTube tracks (smooth natural studio RTA curve)
+          // Dynamic real-time acoustic reactive engine for YouTube tracks
+          const normI = i / BARS_COUNT;
           let ytEnergy = 0;
+
+          // Musical groove and acoustic transients (~82 BPM natural chill/lo-fi tempo)
+          const bpmCadence = now * (82 / 60) * Math.PI * 2;
+          const kickImpulse = Math.pow(Math.max(0, Math.sin(bpmCadence)), 6) * 0.45;
+          const chordImpulse = Math.pow(Math.max(0, Math.sin(bpmCadence + Math.PI)), 4) * 0.28;
+          const oceanSwell = (Math.sin(now * 1.5) * 0.5 + 0.5) * 0.22;
+
+          // Independent per-band micro-dynamics (each bar dances in place with its own acoustic energy, ZERO traveling waves)
+          const bandJitter = Math.sin(now * 17.3 + i * 53.7) * 0.12 + Math.cos(now * 26.1 + i * 109.3) * 0.08;
+
           for (const tr of activeYtTracks) {
             const trVol = (tr.volume ?? 0.8) * (masterVolume / 1.0);
             const trCutoff = Math.min(tr.filterCutoff || 20000, masterFilter || 20000);
 
             // Studio pink noise natural acoustic curve: smooth -3.5dB/octave slope
-            let curve = Math.pow(1 / (1 + fCenter / 420), 0.38);
+            let bandWeight = Math.pow(1 / (1 + fCenter / 380), 0.36);
 
             // Low-pass filter attenuation matching track & master filter
             if (fCenter > trCutoff) {
               const ratio = fCenter / trCutoff;
-              curve *= Math.max(0, 1 / (1 + (ratio - 1) * 3));
+              bandWeight *= Math.max(0, 1 / (1 + (ratio - 1) * 3.5));
             }
 
-            // Studio acoustic volume response: steady, clean frequency curve
-            // ZERO travelling spatial waves (no phase shifts across frequency index i)
-            const breath = 0.97 + Math.sin(now * 1.2) * 0.03;
-            ytEnergy += curve * breath * trVol * 180;
+            // Dynamic frequency-dependent transient boost
+            let dynamicBoost = 1.0;
+            if (normI < 0.22) {
+              // Sub-bass & Bass: pulse with kicks and ocean rolling surge
+              dynamicBoost = 1.0 + kickImpulse * 0.85 + oceanSwell * 0.45;
+            } else if (normI < 0.65) {
+              // Mids: melodic body & chord transients
+              dynamicBoost = 1.0 + chordImpulse * 0.65 + Math.sin(now * 2.8) * 0.10;
+            } else {
+              // Highs: rapid sparkling flutter & hi-hat shimmer
+              dynamicBoost = 1.0 + chordImpulse * 0.35 + Math.sin(now * 5.4) * 0.14;
+            }
+
+            ytEnergy += bandWeight * (dynamicBoost + bandJitter) * trVol * 210;
           }
           ytEnergy = ytEnergy / Math.max(1, Math.sqrt(activeYtTracks.length));
           targetVal = Math.min(255, ytEnergy * gainFactor);

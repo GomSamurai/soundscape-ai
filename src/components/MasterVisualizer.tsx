@@ -976,20 +976,22 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
               <span>Ver Controles</span>
             </button>
           ) : (
-            /* Floating HUD with auto-dimming when mouse is idle */
-            <div className="absolute top-2 left-2 sm:left-3 right-2 sm:right-3 z-10 flex flex-wrap items-center justify-between gap-1.5 pointer-events-none transition-all duration-300 opacity-40 hover:opacity-100 group-hover:opacity-100 focus-within:opacity-100">
-              {/* Left Pill: Indicator & Palette cycler */}
-              <div className="flex items-center gap-2 shrink-0 pointer-events-auto bg-slate-950/75 backdrop-blur-md px-2.5 py-1 rounded-xl border border-slate-800/80 shadow-lg">
-                <div className="flex items-center gap-1.5">
+            /* Unified Master Visualizer Control Bar */
+            <div className="absolute top-2 left-2 right-2 sm:top-2.5 sm:left-3 sm:right-3 z-10 pointer-events-auto flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-2xl bg-slate-950/85 border border-slate-800/90 backdrop-blur-xl shadow-2xl transition-all duration-300 opacity-60 hover:opacity-100 group-hover:opacity-100 focus-within:opacity-100 select-none">
+              {/* Left Section: Live Master Indicator & Palette Cycler */}
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 pl-1 pr-0.5">
                   <span
-                    className={`w-2 h-2 rounded-full transition-colors ${
+                    className={`w-2.5 h-2.5 rounded-full transition-all ${
                       isPlaying ? 'bg-emerald-400 shadow-[0_0_8px_#10B981]' : 'bg-slate-600'
                     }`}
                   />
-                  <span className="text-[10px] font-bold tracking-wider uppercase text-slate-200">
+                  <span className="text-[11px] font-bold tracking-wider uppercase text-slate-200 hidden xs:inline">
                     MÁSTER
                   </span>
                 </div>
+
+                <div className="h-4 w-px bg-slate-800 shrink-0" />
 
                 {/* Quick Palette Cycler Button */}
                 <button
@@ -999,23 +1001,25 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
                     setActiveTab('colors');
                     setIsSettingsOpen(true);
                   }}
-                  title={`Paleta: ${activePalette.name} (Clic para cambiar paleta, clic derecho para abrir ajustes)`}
-                  className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-slate-900/80 hover:bg-slate-800/90 border border-slate-700/80 hover:border-cyan-500/50 cursor-pointer transition-all text-[10px] text-slate-200"
+                  title={`Paleta: ${activePalette.name} (Clic para cambiar paleta)`}
+                  className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 border border-slate-700/60 hover:border-cyan-500/50 cursor-pointer transition-all text-[11px] text-slate-200"
                 >
                   <span
-                    className="w-2.5 h-2.5 rounded-full shadow-sm"
+                    className="w-2.5 h-2.5 rounded-full shadow-sm shrink-0"
                     style={{
                       backgroundColor: activePalette.primary,
                       boxShadow: `0 0 6px ${activePalette.glow}`,
                     }}
                   />
-                  <span className="hidden sm:inline font-medium">{activePalette.name}</span>
-                  <RotateCcw className="w-2.5 h-2.5 text-slate-400 hover:text-white" />
+                  <span className="font-medium hidden sm:inline truncate max-w-[100px]">{activePalette.name}</span>
+                  <RotateCcw className="w-3 h-3 text-slate-400 hover:text-white" />
                 </button>
               </div>
 
-              {/* Center Pill: ALL 10 Visualizer Modes */}
-              <div className="flex items-center gap-1 pointer-events-auto bg-slate-950/75 backdrop-blur-md p-1 rounded-xl border border-slate-800/80 shadow-lg max-w-[calc(100%-120px)] sm:max-w-none overflow-x-auto no-scrollbar">
+              <div className="h-4 w-px bg-slate-800 shrink-0 hidden md:block" />
+
+              {/* Center Section: ALL 10 Visualizer Modes Segmented Ribbon */}
+              <div className="flex-1 min-w-0 flex items-center justify-start sm:justify-center gap-1 overflow-x-auto no-scrollbar px-1">
                 {VISUALIZER_MODES_CONFIG.map((item) => {
                   const Icon = item.icon;
                   const isActive = settings.mode === item.mode;
@@ -1024,44 +1028,49 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
                       key={item.mode}
                       onClick={() => updateSettings({ mode: item.mode })}
                       title={`${item.label}: ${item.desc}`}
-                      className={`px-2 py-1 text-[10px] font-semibold rounded-lg flex items-center gap-1.5 transition-all shrink-0 cursor-pointer ${
+                      className={`px-2 py-1 text-[11px] font-semibold rounded-lg flex items-center gap-1.5 transition-all shrink-0 cursor-pointer ${
                         isActive
                           ? 'bg-cyan-500/25 text-cyan-200 border border-cyan-400/60 shadow-[0_0_10px_rgba(6,182,212,0.35)]'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/80 border border-transparent'
+                          : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900/70 border border-transparent'
                       }`}
                     >
                       <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-cyan-300' : 'text-slate-400'}`} />
-                      <span>{item.label}</span>
+                      <span className="whitespace-nowrap">{item.label}</span>
                     </button>
                   );
                 })}
               </div>
 
-              {/* Right Pill: Quick Dynamics, Height, Immersion, & Studio Config */}
-              <div className="flex items-center gap-1 pointer-events-auto bg-slate-950/75 backdrop-blur-md p-1 rounded-xl border border-slate-800/80 shadow-lg shrink-0 relative">
+              <div className="h-4 w-px bg-slate-800 shrink-0 hidden md:block" />
+
+              {/* Right Section: Integrated Actions (DSP Dynamics, Immersion, Pro Studio) */}
+              <div className="flex items-center gap-1.5 shrink-0">
                 {/* Dynamics Quick Adjust Popover Trigger */}
                 <div className="relative">
                   <button
                     onClick={() => setIsDynamicsOpen((v) => !v)}
                     title="Ajustar Sensibilidad y Suavizado temporal"
-                    className={`px-2 py-1 text-[10px] font-mono rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
+                    className={`px-2 py-1 text-[11px] font-medium rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
                       isDynamicsOpen
-                        ? 'bg-cyan-950 text-cyan-300 border-cyan-500/50'
-                        : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white'
+                        ? 'bg-cyan-950 text-cyan-300 border-cyan-500/50 shadow-sm'
+                        : 'bg-slate-900/80 border-slate-700/60 hover:border-slate-600 text-slate-300 hover:text-white'
                     }`}
                   >
-                    <Activity className="w-3 h-3 text-cyan-400" />
-                    <span className="hidden md:inline">Sens: {settings.gain.toFixed(2)}x</span>
-                    <span className="hidden md:inline text-slate-600">|</span>
-                    <span className="hidden md:inline">Suav: {Math.round((settings.smoothing ?? 0.82) * 100)}%</span>
-                    <span className="md:hidden">DSP</span>
+                    <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                    <span className="hidden xl:inline font-mono">Sens: {settings.gain.toFixed(2)}x</span>
+                    <span className="hidden xl:inline text-slate-600">|</span>
+                    <span className="hidden xl:inline font-mono">Suav: {Math.round((settings.smoothing ?? 0.82) * 100)}%</span>
+                    <span className="xl:hidden">DSP</span>
                   </button>
 
                   {/* Floating Dynamics Slider Popover */}
                   {isDynamicsOpen && (
-                    <div className="absolute right-0 top-full mt-2 w-56 p-3 rounded-xl bg-slate-900/95 border border-cyan-500/40 shadow-2xl backdrop-blur-xl z-30 space-y-3 animate-fade-in">
+                    <div className="absolute right-0 top-full mt-2 w-64 p-3.5 rounded-2xl bg-slate-950/95 border border-cyan-500/40 shadow-2xl backdrop-blur-2xl z-30 space-y-3 animate-fade-in">
                       <div className="flex items-center justify-between text-xs font-bold text-slate-200 border-b border-slate-800 pb-1.5">
-                        <span>Dinámica Visual</span>
+                        <span className="flex items-center gap-1.5">
+                          <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>Dinámica del Visualizador</span>
+                        </span>
                         <button
                           onClick={() => setIsDynamicsOpen(false)}
                           className="text-slate-400 hover:text-white cursor-pointer"
@@ -1071,7 +1080,7 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
                       </div>
 
                       <div className="space-y-1">
-                        <div className="flex justify-between text-[10px] text-slate-300">
+                        <div className="flex justify-between text-[11px] text-slate-300">
                           <span>Sensibilidad (Ganancia)</span>
                           <span className="font-mono text-cyan-400 font-bold">{settings.gain.toFixed(2)}x</span>
                         </div>
@@ -1082,12 +1091,12 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
                           step="0.05"
                           value={settings.gain}
                           onChange={(e) => updateSettings({ gain: parseFloat(e.target.value) })}
-                          className="w-full accent-cyan-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                          className="w-full accent-cyan-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
                         />
                       </div>
 
                       <div className="space-y-1">
-                        <div className="flex justify-between text-[10px] text-slate-300">
+                        <div className="flex justify-between text-[11px] text-slate-300">
                           <span>Suavizado Anti-Tembleque</span>
                           <span className="font-mono text-cyan-400 font-bold">
                             {Math.round((settings.smoothing ?? 0.82) * 100)}%
@@ -1100,52 +1109,50 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
                           step="0.02"
                           value={settings.smoothing ?? 0.82}
                           onChange={(e) => updateSettings({ smoothing: parseFloat(e.target.value) })}
-                          className="w-full accent-cyan-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                          className="w-full accent-cyan-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
                         />
+                      </div>
+
+                      {/* Screen Height Selection */}
+                      <div className="pt-2 border-t border-slate-800 space-y-1">
+                        <span className="text-[10px] text-slate-400 font-medium">Tamaño de pantalla</span>
+                        <div className="grid grid-cols-3 gap-1">
+                          {(['compact', 'medium', 'tall'] as VisualizerHeight[]).map((h) => (
+                            <button
+                              key={h}
+                              onClick={() => updateSettings({ heightMode: h })}
+                              className={`py-1 text-[10px] font-semibold rounded-lg capitalize transition-all cursor-pointer ${
+                                settings.heightMode === h
+                                  ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-400/50'
+                                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                              }`}
+                            >
+                              {h === 'compact' ? 'Compacto' : h === 'medium' ? 'Medio' : 'Alto'}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* Height Mode Toggle */}
-                <button
-                  onClick={() => {
-                    const nextHeight: VisualizerHeight =
-                      settings.heightMode === 'compact'
-                        ? 'medium'
-                        : settings.heightMode === 'medium'
-                        ? 'tall'
-                        : 'compact';
-                    updateSettings({ heightMode: nextHeight });
-                  }}
-                  title={`Tamaño del visualizador: ${settings.heightMode} (Clic para cambiar)`}
-                  className="p-1 px-1.5 sm:px-2 sm:py-1 text-[10px] rounded-lg bg-slate-900/80 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white cursor-pointer flex items-center gap-1 transition-all"
-                >
-                  {settings.heightMode === 'tall' ? (
-                    <Minimize2 className="w-3 h-3 text-cyan-400" />
-                  ) : (
-                    <Maximize2 className="w-3 h-3 text-slate-400" />
-                  )}
-                  <span className="hidden xl:inline capitalize">{settings.heightMode}</span>
-                </button>
-
                 {/* Immersion Mode Button */}
                 <button
                   onClick={() => setIsImmersiveMode(true)}
                   title="Modo Inmersión Total (ocultar controles y maximizar visión)"
-                  className="p-1 px-1.5 sm:px-2 sm:py-1 text-[10px] rounded-lg bg-slate-900/80 border border-slate-800 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-300 cursor-pointer flex items-center gap-1 transition-all"
+                  className="p-1 sm:px-2 sm:py-1 rounded-lg bg-slate-900/80 border border-slate-700/60 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-300 cursor-pointer transition-all flex items-center gap-1.5 text-[11px]"
                 >
-                  <Eye className="w-3 h-3 text-cyan-400" />
-                  <span className="hidden lg:inline">Inmersión</span>
+                  <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="hidden sm:inline">Inmersión</span>
                 </button>
 
                 {/* Full Config Modal Button */}
                 <button
                   onClick={() => setIsSettingsOpen(true)}
                   title="Abrir Estudio de Visualización PRO (Paletas, Balística, Presets)"
-                  className="px-2 py-1 text-[10px] font-bold rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-md border border-cyan-400/40 flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-md border border-cyan-400/40 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
                 >
-                  <Sliders className="w-3 h-3" />
+                  <Sliders className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Ajustes</span>
                 </button>
               </div>

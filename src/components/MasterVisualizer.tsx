@@ -344,7 +344,6 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
           smoothBars.current[i] = Math.max(0, smoothBars.current[i] * 0.82 - 2);
           peakHoldBars.current[i] = Math.max(0, peakHoldBars.current[i] * 0.82 - 2);
         }
-        setPeakDb(-60);
         setStereoCorr(1.0);
 
         // Quiet flat studio reference baseline
@@ -360,7 +359,6 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
       // 1. Read real Web Audio master analyser node
       const analyser = audioEngine.getMasterAnalyser();
       if (!analyser) {
-        setPeakDb(-60);
         return;
       }
 

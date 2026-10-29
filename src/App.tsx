@@ -637,8 +637,15 @@ export default function App() {
   };
   const activeColor = themeColors[activeProject.visualTheme] || '#F43F5E';
 
+  // Mouse wheel horizontal scroll handler for channel strip rack
+  const handleRackWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (e.deltaY !== 0 && !e.shiftKey) {
+      e.currentTarget.scrollLeft += e.deltaY * 0.85;
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans overflow-x-clip">
       {/* 3-Zone Top Bar with Global Play/Stop Transport */}
       <TopBar
         currentView={currentView}
@@ -992,10 +999,13 @@ export default function App() {
                 </div>
               )}
 
-              <div className="flex flex-col lg:flex-row gap-4 items-start">
+              <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-start w-full min-w-0">
                 {/* Channel Strips Rack (Scrolls horizontally with smooth padding) */}
-                <div className="flex-1 w-full lg:w-auto overflow-x-auto pb-2 pt-0.5">
-                  <div className="flex items-start gap-3 min-w-max pr-2 pl-0.5">
+                <div
+                  onWheel={handleRackWheel}
+                  className="flex-1 w-full min-w-0 overflow-x-auto pb-3 pt-0.5 custom-scroll overscroll-x-contain touch-pan-x"
+                >
+                  <div className="flex items-start gap-3 min-w-max pr-3 pl-0.5">
                     {activeProject.channels.length === 0 ? (
                       <div className="w-80 h-[480px] flex flex-col items-center justify-center p-8 text-center text-slate-500 space-y-3 border border-dashed border-slate-800 rounded-xl">
                         <p className="text-sm">No hay canales en la mezcla actual.</p>
@@ -1029,7 +1039,7 @@ export default function App() {
                           ))}
 
                         {/* Botón + Añadir Canal */}
-                        <div className="w-44 sm:w-48 shrink-0 min-h-[480px] rounded-xl border-2 border-dashed border-slate-800 hover:border-cyan-500/60 bg-slate-900/40 hover:bg-slate-900/70 transition-all p-3 flex flex-col items-center justify-center text-center group shadow-lg">
+                        <div className="w-44 sm:w-48 shrink-0 min-h-[470px] rounded-2xl border-2 border-dashed border-slate-800 hover:border-cyan-500/60 bg-slate-900/40 hover:bg-slate-900/70 transition-all p-3 flex flex-col items-center justify-center text-center group shadow-lg">
                           <button
                             onClick={() => setIsSearchOpen(true)}
                             className="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700/80 group-hover:border-cyan-400 group-hover:bg-cyan-950/50 flex items-center justify-center mb-2 transition-all shadow-md group-hover:scale-105 cursor-pointer"
@@ -1087,8 +1097,8 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Master Strip Console (Docked on Right, Matching Height) */}
-                <div className="shrink-0 self-start">
+                {/* Master Strip Console (Docked on Right on Desktop, Centered on Mobile/Tablet) */}
+                <div className="w-full lg:w-auto shrink-0 flex justify-center lg:justify-start self-start">
                   <MasterStrip
                     tracks={activeProject.channels}
                     masterVolume={activeProject.masterVolume}

@@ -347,89 +347,89 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
   return (
     <div className="relative w-full h-24 sm:h-28 rounded-xl bg-slate-950/90 border border-slate-800/80 overflow-hidden shadow-xl backdrop-blur-md flex flex-col justify-between select-none">
       {/* Top Header Overlay: Live dBFS & 5 Visualizer Modes */}
-      <div className="absolute top-2 left-3 right-3 z-10 flex items-center justify-between pointer-events-none">
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1.5">
+      <div className="absolute top-2 left-2 sm:left-3 right-2 sm:right-3 z-10 flex items-center justify-between pointer-events-none gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5">
             <span
               className={`w-2 h-2 rounded-full ${
                 isPlaying ? 'bg-emerald-400 shadow-[0_0_8px_#10B981]' : 'bg-slate-600'
               }`}
             />
-            <span className="text-[10px] font-bold tracking-wider uppercase text-slate-300">
+            <span className="text-[9px] sm:text-[10px] font-bold tracking-wider uppercase text-slate-300">
               Analizador Máster
             </span>
           </div>
 
-          <span className="text-[10px] font-mono tabular-nums text-cyan-400 font-bold bg-cyan-950/70 px-2 py-0.5 rounded border border-cyan-800/40 shadow-inner">
+          <span className="text-[9px] sm:text-[10px] font-mono tabular-nums text-cyan-400 font-bold bg-cyan-950/70 px-1.5 sm:px-2 py-0.5 rounded border border-cyan-800/40 shadow-inner">
             {isPlaying ? `${peakDb} dBFS` : 'STANDBY'}
           </span>
         </div>
 
         {/* 5 Professional Mode Selector Buttons */}
-        <div className="flex items-center gap-1 p-0.5 bg-slate-900/95 backdrop-blur rounded-lg border border-slate-800 pointer-events-auto shadow-md">
+        <div className="flex items-center gap-0.5 sm:gap-1 p-0.5 bg-slate-900/95 backdrop-blur rounded-lg border border-slate-800 pointer-events-auto shadow-md shrink-0">
           <button
             onClick={() => setMode('spectrum')}
             title="Espectro RTA (64 Bandas con Picos)"
-            className={`px-2 py-1 text-[10px] font-semibold rounded flex items-center gap-1 transition-all whitespace-nowrap cursor-pointer ${
+            className={`p-1 sm:px-2 sm:py-1 text-[10px] font-semibold rounded flex items-center gap-1 transition-all whitespace-nowrap cursor-pointer ${
               mode === 'spectrum'
                 ? 'bg-slate-800 text-cyan-300 shadow-sm border border-cyan-500/30'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <BarChart2 className="w-3 h-3" />
-            <span className="hidden sm:inline">Espectro</span>
+            <span className="hidden md:inline">Espectro</span>
           </button>
 
           <button
             onClick={() => setMode('curve')}
             title="Curva Suave FFT (Analógica Studio Spline)"
-            className={`px-2 py-1 text-[10px] font-semibold rounded flex items-center gap-1 transition-all whitespace-nowrap cursor-pointer ${
+            className={`p-1 sm:px-2 sm:py-1 text-[10px] font-semibold rounded flex items-center gap-1 transition-all whitespace-nowrap cursor-pointer ${
               mode === 'curve'
                 ? 'bg-slate-800 text-cyan-300 shadow-sm border border-cyan-500/30'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <Activity className="w-3 h-3" />
-            <span className="hidden sm:inline">Curva FFT</span>
+            <span className="hidden md:inline">Curva FFT</span>
           </button>
 
           <button
             onClick={() => setMode('oscilloscope')}
             title="Osciloscopio Estéreo (Forma de Onda PCM)"
-            className={`px-2 py-1 text-[10px] font-semibold rounded flex items-center gap-1 transition-all whitespace-nowrap cursor-pointer ${
+            className={`p-1 sm:px-2 sm:py-1 text-[10px] font-semibold rounded flex items-center gap-1 transition-all whitespace-nowrap cursor-pointer ${
               mode === 'oscilloscope'
                 ? 'bg-slate-800 text-cyan-300 shadow-sm border border-cyan-500/30'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <Waves className="w-3 h-3" />
-            <span className="hidden sm:inline">Onda</span>
+            <span className="hidden md:inline">Onda</span>
           </button>
 
           <button
             onClick={() => setMode('waterfall')}
             title="Espectrograma en Cascada (Sonograma Temporal)"
-            className={`px-2 py-1 text-[10px] font-semibold rounded flex items-center gap-1 transition-all whitespace-nowrap cursor-pointer ${
+            className={`p-1 sm:px-2 sm:py-1 text-[10px] font-semibold rounded flex items-center gap-1 transition-all whitespace-nowrap cursor-pointer ${
               mode === 'waterfall'
                 ? 'bg-slate-800 text-cyan-300 shadow-sm border border-cyan-500/30'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <Layers className="w-3 h-3" />
-            <span className="hidden sm:inline">Cascada</span>
+            <span className="hidden md:inline">Cascada</span>
           </button>
 
           <button
             onClick={() => setMode('radial')}
             title="Mandala Polar 360°"
-            className={`px-2 py-1 text-[10px] font-semibold rounded flex items-center gap-1 transition-all whitespace-nowrap cursor-pointer ${
+            className={`p-1 sm:px-2 sm:py-1 text-[10px] font-semibold rounded flex items-center gap-1 transition-all whitespace-nowrap cursor-pointer ${
               mode === 'radial'
                 ? 'bg-slate-800 text-cyan-300 shadow-sm border border-cyan-500/30'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <Disc3 className="w-3 h-3" />
-            <span className="hidden sm:inline">Radial</span>
+            <span className="hidden md:inline">Radial</span>
           </button>
         </div>
       </div>
@@ -439,14 +439,14 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
 
       {/* Frequency Guide Markers */}
       {mode !== 'waterfall' && mode !== 'radial' && (
-        <div className="absolute bottom-1 left-3 right-3 flex items-center justify-between text-[8px] font-mono tabular-nums text-slate-500 pointer-events-none select-none">
+        <div className="absolute bottom-1 left-2 sm:left-3 right-2 sm:right-3 flex items-center justify-between text-[7px] sm:text-[8px] font-mono tabular-nums text-slate-500 pointer-events-none select-none">
           <span>SUB 20Hz</span>
           <span>BASS 100Hz</span>
-          <span>LOW-MID 500Hz</span>
-          <span>MID 1kHz</span>
-          <span>HIGH-MID 4kHz</span>
-          <span>PRESENCE 10kHz</span>
-          <span>AIR 20kHz</span>
+          <span className="hidden sm:inline">LOW-MID 500Hz</span>
+          <span>MID 1k</span>
+          <span className="hidden sm:inline">HIGH-MID 4k</span>
+          <span>PRES 10k</span>
+          <span>AIR 20k</span>
         </div>
       )}
     </div>

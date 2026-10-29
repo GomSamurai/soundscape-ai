@@ -210,9 +210,9 @@ export const MasterStrip: React.FC<MasterStripProps> = ({
   const activeSegmentsR = isMuted ? 0 : Math.round((masterVuRight / 100) * TOTAL_SEGMENTS);
 
   return (
-    <div className="w-52 sm:w-56 shrink-0 h-[460px] rounded-xl bg-slate-900 border-2 border-cyan-500/40 p-2.5 flex flex-col justify-between shadow-2xl relative">
+    <div className="w-full max-w-[280px] sm:w-56 shrink-0 h-[470px] rounded-2xl bg-slate-900/95 border-2 border-cyan-500/40 p-2.5 flex flex-col justify-between shadow-2xl relative">
       {/* Top Cyan Accent Strip */}
-      <div className="absolute top-0 left-0 right-0 h-1 rounded-t-xl bg-gradient-to-r from-cyan-500 to-blue-500 opacity-90 shadow-sm" />
+      <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl bg-gradient-to-r from-cyan-500 to-blue-500 opacity-90 shadow-sm" />
 
       {/* 1. Header: Bus Maestro, IA Balance, Mute */}
       <div className="pt-1 border-b border-slate-800/90 pb-2 flex items-center justify-between">

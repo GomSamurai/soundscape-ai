@@ -338,7 +338,7 @@ export const ChannelStrip: React.FC<ChannelStripProps> = ({
   };
 
   return (
-    <div className="relative w-48 sm:w-52 shrink-0 h-auto min-h-[480px] rounded-2xl bg-slate-900/95 border border-slate-800/90 p-2.5 flex flex-col justify-between shadow-2xl hover:border-slate-700/80 transition-all backdrop-blur-md">
+    <div className="relative w-44 sm:w-48 md:w-52 shrink-0 h-auto min-h-[470px] rounded-2xl bg-slate-900/95 border border-slate-800/90 p-2.5 flex flex-col justify-between shadow-2xl hover:border-slate-700/80 transition-all backdrop-blur-md">
       {/* Top Track Color Accent Strip */}
       <div
         className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl opacity-90 shadow-sm"

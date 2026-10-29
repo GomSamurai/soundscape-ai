@@ -67,9 +67,9 @@ export const GeminiSettingsModal: React.FC<GeminiSettingsModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <span>Configurar Gemini 3.8 Flash</span>
+                <span>Configurar Gemini AI</span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-violet-950 text-violet-300 border border-violet-800">
-                  gemini-3.8-flash
+                  gemini-2.5-flash
                 </span>
               </h3>
               <p className="text-xs text-slate-400">
@@ -128,7 +128,7 @@ export const GeminiSettingsModal: React.FC<GeminiSettingsModalProps> = ({
               {isVerifying ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Comprobando Gemini 3.8 Flash...</span>
+                  <span>Comprobando Gemini AI...</span>
                 </>
               ) : (
                 <>
@@ -177,7 +177,7 @@ export const GeminiSettingsModal: React.FC<GeminiSettingsModalProps> = ({
                 </p>
                 <p className="text-[11px] opacity-90 leading-relaxed">
                   {verifyResult.valid
-                    ? `Modelo: ${verifyResult.model || 'gemini-3.8-flash'}. Origen: ${
+                    ? `Modelo: ${verifyResult.model || 'gemini-2.5-flash'}. Origen: ${
                         verifyResult.isCustom ? 'Personalizada' : 'Servidor'
                       }. Respuesta de prueba recibida correctamente.`
                     : verifyResult.error}
@@ -199,7 +199,7 @@ export const GeminiSettingsModal: React.FC<GeminiSettingsModalProps> = ({
             <p>
               Tu clave personalizada se almacena únicamente en tu navegador y se envía directamente a la
               pasarela segura del servidor para procesar las peticiones de Soundscape AI con el modelo{' '}
-              <code className="text-violet-300 font-mono">gemini-3.8-flash</code>.
+              <code className="text-violet-300 font-mono">gemini-2.5-flash</code>.
             </p>
           </div>
         </div>

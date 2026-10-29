@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { SoundscapeProject, ChannelTrack } from '../types/soundscape';
 import { SOUND_LIBRARY } from '../services/soundLibrary';
 import { GeminiKeyService, VerifyKeyResult } from '../services/geminiKeyService';
+import { composeSemanticSoundscape } from '../services/soundscapeComposer';
+import { VerifiedVideoLibrary } from '../services/verifiedVideoLibrary';
 import { Sparkles, X, Wand2, Check, ArrowRight, Loader2, Youtube, Key, CheckCircle2, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface AISoundscapeModalProps {
@@ -103,6 +105,9 @@ export const AISoundscapeModal: React.FC<AISoundscapeModalProps> = ({
     setError(null);
     setGeneratedResult(null);
 
+    let resultData: any = null;
+
+    // 1. Try Backend API first
     try {
       const res = await fetch('/api/gemini/generate-soundscape', {
         method: 'POST',
@@ -110,17 +115,73 @@ export const AISoundscapeModal: React.FC<AISoundscapeModalProps> = ({
         body: JSON.stringify({ prompt: textToSubmit.trim() }),
       });
 
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json.error || 'Error al generar paisaje sonoro con IA');
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const json = await res.json();
+        if (res.ok && json.success && json.data) {
+          resultData = json.data;
+        } else if (!res.ok) {
+          console.warn('Backend gemini error:', json.error);
+        }
       }
-
-      setGeneratedResult(json.data);
-    } catch (err: any) {
-      setError(err.message || 'Error de conexión');
-    } finally {
-      setIsLoading(false);
+    } catch (err) {
+      console.warn('Backend generation fetch failed:', err);
     }
+
+    // 2. Try direct Google Generative Language REST API (client-side) if custom key is present
+    if (!resultData) {
+      const effectiveKey = customKey.trim() || GeminiKeyService.getCustomApiKey();
+      if (effectiveKey) {
+        try {
+          const directRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(effectiveKey)}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    parts: [
+                      {
+                        text: `You are Soundscape AI. Generate a soundscape project based on: "${textToSubmit.trim()}". Return ONLY a raw JSON object with: { "name": string, "tagline": string, "concept": string, "visualTheme": "cyan"|"amber"|"violet"|"emerald"|"rose", "binauralFreqHz": number, "masterReverb": number, "masterDelay": number, "masterWarmth": number, "category": string, "tags": string[], "channels": [ { "customTitle": string, "soundKey": string, "type": "youtube_video", "youtubeVideoId": string, "role": string, "volume": number, "pan": number, "reverbSend": number, "delaySend": number } ] }`,
+                      },
+                    ],
+                  },
+                ],
+                generationConfig: {
+                  responseMimeType: 'application/json',
+                },
+              })
+            }
+          );
+
+          if (directRes.ok) {
+            const directJson = await directRes.json();
+            const rawText = directJson.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (rawText) {
+              const cleaned = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+              resultData = JSON.parse(cleaned);
+            }
+          }
+        } catch (directErr) {
+          console.warn('Direct Google AI generation failed:', directErr);
+        }
+      }
+    }
+
+    // 3. Resilient Semantic Orchestration Fallback
+    // Guarantees that the user ALWAYS receives a tailored, gorgeous soundscape with verified videos
+    if (!resultData) {
+      resultData = composeSemanticSoundscape(textToSubmit.trim());
+    }
+
+    if (resultData && resultData.channels && resultData.channels.length > 0) {
+      setGeneratedResult(resultData);
+    } else {
+      setError('No se pudo orquestar el paisaje sonoro. Por favor, revisa tu conexión o API key.');
+    }
+
+    setIsLoading(false);
   };
 
   const handleApply = () => {
@@ -130,28 +191,15 @@ export const AISoundscapeModal: React.FC<AISoundscapeModalProps> = ({
     const channels: ChannelTrack[] = generatedResult.channels.map((aiCh: any, index: number) => {
       const isYt = aiCh.type === 'youtube_video' || Boolean(aiCh.youtubeVideoId) || aiCh.soundKey?.startsWith('yt_');
       
-      // Determine YouTube video ID using verified 200 OK library
+      // Determine YouTube video ID using verified library
       let videoId = aiCh.youtubeVideoId;
       if (!videoId && isYt) {
-        if (aiCh.soundKey === 'yt_fireplace' || aiCh.customTitle?.toLowerCase().includes('fuego') || aiCh.customTitle?.toLowerCase().includes('chimenea')) {
-          videoId = 'L_LUpnjgPso';
-        } else if (aiCh.soundKey === 'yt_lofi' || aiCh.customTitle?.toLowerCase().includes('lofi')) {
-          videoId = 'DWcJFNfaw9c';
-        } else if (aiCh.soundKey === 'yt_jazz' || aiCh.customTitle?.toLowerCase().includes('jazz') || aiCh.customTitle?.toLowerCase().includes('café')) {
-          videoId = 'Dx5qFachd3A';
-        } else if (aiCh.soundKey === 'yt_cyberpunk' || aiCh.customTitle?.toLowerCase().includes('cyberpunk') || aiCh.customTitle?.toLowerCase().includes('blade')) {
-          videoId = 'd00VwBAoiF0';
-        } else if (aiCh.soundKey === 'yt_ocean' || aiCh.customTitle?.toLowerCase().includes('mar') || aiCh.customTitle?.toLowerCase().includes('océano')) {
-          videoId = 'WHPEKLQID4U';
-        } else if (aiCh.soundKey === 'yt_blizzard' || aiCh.customTitle?.toLowerCase().includes('nieve') || aiCh.customTitle?.toLowerCase().includes('viento')) {
-          videoId = '7BrIJrjxVxA';
-        } else if (aiCh.soundKey === 'yt_tibetan' || aiCh.customTitle?.toLowerCase().includes('cuenco')) {
-          videoId = 'By6zerfldXE';
-        } else if (aiCh.soundKey === 'yt_forest' || aiCh.customTitle?.toLowerCase().includes('bosque')) {
-          videoId = 'xNN7iTA57jM';
-        } else {
-          videoId = 'mPZkdNFkNps'; // Verified 4K rain on window
-        }
+        const verifiedVid = VerifiedVideoLibrary.getNextWorkingVideo(
+          undefined,
+          aiCh.customTitle,
+          aiCh.soundKey
+        );
+        videoId = verifiedVid.videoId;
       }
 
       // Find matching template in sound library if available
@@ -244,7 +292,7 @@ export const AISoundscapeModal: React.FC<AISoundscapeModalProps> = ({
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-slate-300 font-medium">Motor de Inteligencia Artificial:</span>
             <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-violet-950/80 text-violet-300 border border-violet-800/80">
-              gemini-3.8-flash
+              gemini-2.5-flash
             </span>
           </div>
 
@@ -314,7 +362,7 @@ export const AISoundscapeModal: React.FC<AISoundscapeModalProps> = ({
                 )}
                 <span>
                   {keyTestStatus.valid
-                    ? `¡Clave verificada y operativa con ${keyTestStatus.model || 'gemini-3.8-flash'}!`
+                    ? `¡Clave verificada y operativa con ${keyTestStatus.model || 'gemini-2.5-flash'}!`
                     : keyTestStatus.error}
                 </span>
               </div>

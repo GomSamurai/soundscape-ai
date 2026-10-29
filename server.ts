@@ -15,6 +15,14 @@ const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json({ limit: '20mb' }));
 
+// Express JSON body-parser error handler to prevent HTML stack traces
+app.use((err: any, req: any, res: any, next: any) => {
+  if (err instanceof SyntaxError && 'body' in err) {
+    return res.status(400).json({ success: false, valid: false, error: 'JSON malformado en la solicitud' });
+  }
+  next();
+});
+
 // In-memory Cloud Sync Store for persistence
 interface CloudSoundscapeProject {
   id: string;
@@ -52,12 +60,12 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     hasGemini: Boolean(defaultAi),
-    defaultModel: 'gemini-3.8-flash',
+    defaultModel: 'gemini-2.5-flash',
     timestamp: new Date().toISOString(),
   });
 });
 
-// API: Verify custom or default Gemini API key in real-time with gemini-3.8-flash
+// API: Verify custom or default Gemini API key in real-time with gemini-2.5-flash (with fallback)
 app.post('/api/gemini/verify-key', async (req, res) => {
   const clientKey = (req.headers['x-gemini-api-key'] as string) || req.body?.apiKey;
   const keyToTest = clientKey?.trim() || process.env.GEMINI_API_KEY?.trim();
@@ -79,23 +87,48 @@ app.post('/api/gemini/verify-key', async (req, res) => {
       },
     });
 
-    const response = await testAi.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: 'Ping de verificación para Soundscape AI suite. Responde únicamente con: OK',
-    });
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    let lastError: any = null;
+    let successfulModel = '';
+    let responseText = '';
+
+    for (const modelName of modelsToTry) {
+      try {
+        const response = await testAi.models.generateContent({
+          model: modelName,
+          contents: 'Ping de verificación para Soundscape AI suite. Responde únicamente con: OK',
+        });
+        successfulModel = modelName;
+        responseText = response.text?.trim() || 'OK';
+        break;
+      } catch (mErr: any) {
+        lastError = mErr;
+      }
+    }
+
+    if (!successfulModel) {
+      throw lastError || new Error('No se pudo conectar con ningún modelo Gemini Flash disponible.');
+    }
 
     return res.json({
       success: true,
       valid: true,
-      model: 'gemini-3.8-flash',
-      message: 'Conexión validada exitosamente con Gemini 3.8 Flash.',
-      reply: response.text?.trim() || 'OK',
+      model: successfulModel,
+      message: `Conexión validada exitosamente con ${successfulModel}.`,
+      reply: responseText,
       isCustom: Boolean(clientKey?.trim()),
     });
   } catch (err: any) {
+    let cleanMsg = err.message || 'Error al validar la clave con Gemini. Verifica que sea correcta.';
+    try {
+      if (cleanMsg.startsWith('{')) {
+        const parsed = JSON.parse(cleanMsg);
+        if (parsed.error?.message) cleanMsg = parsed.error.message;
+      }
+    } catch {}
     return res.status(400).json({
       valid: false,
-      error: err.message || 'Error al validar la clave con Gemini 3.8 Flash. Verifica que sea correcta.',
+      error: cleanMsg,
     });
   }
 });
@@ -314,22 +347,30 @@ app.get('/api/youtube/search', async (req, res) => {
 
 // API: Find Valid Replacement for Broken / Unavailable Video
 app.get('/api/youtube/find-replacement', async (req, res) => {
-  const { query = 'ambient soundscape relaxing', category = '' } = req.query;
+  const { query = 'ambient soundscape relaxing', category = '', currentId = '' } = req.query as Record<string, string>;
   const searchTerm = `${query} ${category} ambience relaxing`.trim();
 
   try {
-    const verified = await searchVerifiedYouTube(searchTerm, 3);
-    if (verified.length > 0) {
+    const verified = await searchVerifiedYouTube(searchTerm, 6);
+    // Find candidate whose ID is DIFFERENT from currentId
+    const diff = verified.filter((v) => v.videoId !== currentId);
+    if (diff.length > 0) {
+      return res.json({ success: true, replacement: diff[0] });
+    }
+    if (verified.length > 0 && verified[0].videoId !== currentId) {
       return res.json({ success: true, replacement: verified[0] });
     }
-    // Safe guaranteed fallback
-    const fb = VERIFIED_FALLBACKS.rain;
+
+    // Safe guaranteed fallback that rotates and is different from currentId
+    const fbList = Object.values(VERIFIED_FALLBACKS).filter((f) => f.id !== currentId);
+    const chosen = fbList.length > 0 ? fbList[Math.floor(Math.random() * fbList.length)] : VERIFIED_FALLBACKS.rain;
+
     res.json({
       success: true,
       replacement: {
-        videoId: fb.id,
-        title: fb.title,
-        thumbnail: `https://img.youtube.com/vi/${fb.id}/hqdefault.jpg`,
+        videoId: chosen.id,
+        title: chosen.title,
+        thumbnail: `https://img.youtube.com/vi/${chosen.id}/hqdefault.jpg`,
       },
     });
   } catch (err: any) {
@@ -396,8 +437,12 @@ Para CADA canal de YouTube:
 Para capas de sintetizador procedimental:
 - Usa soundKey: 'binaural_theta', 'binaural_alpha', 'binaural_delta', 'drone_sub', 'pink_noise', 'brown_noise', 'white_noise', 'ocean', 'rain', 'wind', 'vinyl'.`;
 
-      const response = await activeAi.models.generateContent({
-        model: 'gemini-3.8-flash',
+      let response: any = null;
+      const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+      for (const mName of modelsToTry) {
+        try {
+          response = await activeAi.models.generateContent({
+            model: mName,
         contents: `Diseña una composición acústica para esta petición del usuario: "${prompt}".
 Genera entre 3 y 5 canales equilibrados, de los cuales al menos 1 o 2 sean videos de YouTube con términos de búsqueda específicos.
 Pistas previas (evitar duplicados innecesarios): ${JSON.stringify(currentTracks)}.`,
@@ -459,6 +504,11 @@ Pistas previas (evitar duplicados innecesarios): ${JSON.stringify(currentTracks)
           },
         },
       });
+          if (response?.text) break;
+        } catch (mErr) {
+          console.warn(`Model ${mName} generation failed, trying fallback...`, mErr);
+        }
+      }
 
       parsedRecipe = JSON.parse(response.text || '{}');
     } catch (apiErr: any) {
@@ -619,8 +669,12 @@ app.post('/api/gemini/balance-mix', async (req, res) => {
   }
 
   try {
-    const response = await activeAi.models.generateContent({
-      model: 'gemini-3.8-flash',
+    let response: any = null;
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    for (const mName of modelsToTry) {
+      try {
+        response = await activeAi.models.generateContent({
+          model: mName,
       contents: `Eres un Ingeniero de Mastering Acústico. Optimiza la siguiente mezcla multicanal para evitar enmascaramiento frecuencial, mejorar la imagen estéreo y mantener un balance orgánico y transparente:
 ${JSON.stringify(channels, null, 2)}`,
       config: {
@@ -651,6 +705,11 @@ ${JSON.stringify(channels, null, 2)}`,
         },
       },
     });
+        if (response?.text) break;
+      } catch (mErr) {
+        console.warn(`Mix balance model ${mName} failed, trying fallback...`, mErr);
+      }
+    }
 
     const parsed = JSON.parse(response.text || '{}');
     res.json({ success: true, data: parsed });

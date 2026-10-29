@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChannelTrack } from '../types/soundscape';
 import { YouTubePlayerEmbed } from './YouTubePlayerEmbed';
+import { VerifiedVideoLibrary } from '../services/verifiedVideoLibrary';
 import { Volume2, VolumeX, Trash2, Plus, Youtube, ExternalLink, RefreshCw } from 'lucide-react';
 
 interface MultiVideoGridProps {
@@ -31,17 +32,46 @@ export const MultiVideoGrid: React.FC<MultiVideoGridProps> = ({
   const handleAutoReplace = async (track: ChannelTrack) => {
     try {
       const cleanName = track.name.replace(/\(.*?\)/g, '').trim();
-      const res = await fetch(
-        `/api/youtube/find-replacement?query=${encodeURIComponent(cleanName)}&category=${encodeURIComponent(
-          track.category || ''
-        )}`
-      );
-      const data = await res.json();
-      if (data.success && data.replacement) {
+      let newVideoId = '';
+      let newTitle = '';
+      let newThumb = '';
+
+      try {
+        const res = await fetch(
+          `/api/youtube/find-replacement?query=${encodeURIComponent(cleanName)}&category=${encodeURIComponent(
+            track.category || ''
+          )}&currentId=${encodeURIComponent(track.youtubeVideoId || '')}`
+        );
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json();
+          if (data.success && data.replacement && data.replacement.videoId && data.replacement.videoId !== track.youtubeVideoId) {
+            newVideoId = data.replacement.videoId;
+            newTitle = data.replacement.title;
+            newThumb = data.replacement.thumbnail;
+          }
+        }
+      } catch (networkErr) {
+        console.warn('Backend find-replacement unreachable, using verified catalog:', networkErr);
+      }
+
+      // If backend didn't supply a different working video, use local verified rotation library
+      if (!newVideoId) {
+        const fallback = VerifiedVideoLibrary.getNextWorkingVideo(
+          track.youtubeVideoId,
+          cleanName,
+          track.category
+        );
+        newVideoId = fallback.videoId;
+        newTitle = fallback.title;
+        newThumb = fallback.thumbnail;
+      }
+
+      if (newVideoId) {
         onUpdateTrack(track.id, {
-          youtubeVideoId: data.replacement.videoId,
-          youtubeThumbnail: data.replacement.thumbnail,
-          name: `${data.replacement.title.slice(0, 32)} (Actualizado)`,
+          youtubeVideoId: newVideoId,
+          youtubeThumbnail: newThumb || `https://img.youtube.com/vi/${newVideoId}/hqdefault.jpg`,
+          name: `${newTitle.slice(0, 32)} (Actualizado)`,
           isUnavailable: false,
         });
       }

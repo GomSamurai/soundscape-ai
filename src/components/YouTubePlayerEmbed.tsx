@@ -33,9 +33,10 @@ export const YouTubePlayerEmbed: React.FC<YouTubePlayerEmbedProps> = ({
   onOpenReplace,
   onErrorChange,
 }) => {
-  const containerId = `yt-player-${trackId}`;
+  const containerId = `yt-player-${trackId}-${videoId}`;
   const [hasError, setHasError] = useState(false);
   const [errorCode, setErrorCode] = useState<number | null>(null);
+  const [isAutoReplacing, setIsAutoReplacing] = useState(false);
 
   useEffect(() => {
     setHasError(false);
@@ -62,7 +63,7 @@ export const YouTubePlayerEmbed: React.FC<YouTubePlayerEmbedProps> = ({
     return () => {
       youtubeManager.unregisterPlayer(trackId);
     };
-  }, [trackId, videoId]);
+  }, [trackId, videoId, containerId]);
 
   // Volume & mute dynamic synchronization
   useEffect(() => {
@@ -78,6 +79,17 @@ export const YouTubePlayerEmbed: React.FC<YouTubePlayerEmbedProps> = ({
     }
   }, [isPlaying]);
 
+  const handleTriggerAutoReplace = async () => {
+    if (isAutoReplacing || !onAutoReplace) return;
+    setIsAutoReplacing(true);
+    setHasError(false); // Optimistically clear error while replacement loads
+    try {
+      await onAutoReplace();
+    } finally {
+      setIsAutoReplacing(false);
+    }
+  };
+
   return (
     <div
       className={`relative overflow-hidden rounded-lg bg-black ${className} ${
@@ -86,11 +98,11 @@ export const YouTubePlayerEmbed: React.FC<YouTubePlayerEmbedProps> = ({
           : 'fixed bottom-1 right-1 w-[200px] h-[120px] opacity-[0.01] pointer-events-none z-0 overflow-hidden'
       }`}
     >
-      <div id={containerId} className="w-full h-full aspect-video" />
+      <div key={`${trackId}-${videoId}`} id={containerId} className="w-full h-full aspect-video" />
 
       {/* Graceful Error Fallback Overlay if YouTube blocks embedding */}
       {hasError && visible && (
-        <div className="absolute inset-0 bg-slate-950/95 p-3 flex flex-col items-center justify-center text-center space-y-2 z-20 border border-rose-500/40">
+        <div className="absolute inset-0 bg-slate-950/95 p-3 flex flex-col items-center justify-center text-center space-y-2 z-20 border border-rose-500/40 animate-fade-in">
           <AlertCircle className="w-5 h-5 text-rose-400" />
           <div className="space-y-0.5">
             <h5 className="text-xs font-bold text-white">Video no disponible en YouTube</h5>
@@ -104,12 +116,13 @@ export const YouTubePlayerEmbed: React.FC<YouTubePlayerEmbedProps> = ({
           <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
             {onAutoReplace && (
               <button
-                onClick={onAutoReplace}
-                className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-sm"
+                onClick={handleTriggerAutoReplace}
+                disabled={isAutoReplacing}
+                className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-sm"
                 title="Buscar y aplicar automáticamente un video activo verificado"
               >
-                <RefreshCw className="w-3 h-3" />
-                <span>Actualizar por uno válido</span>
+                <RefreshCw className={`w-3 h-3 ${isAutoReplacing ? 'animate-spin' : ''}`} />
+                <span>{isAutoReplacing ? 'Reemplazando...' : 'Actualizar por uno válido'}</span>
               </button>
             )}
 

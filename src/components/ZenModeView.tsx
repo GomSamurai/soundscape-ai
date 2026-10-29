@@ -20,20 +20,20 @@ import {
   Cpu,
   Check,
   Pin,
+  Star,
+  Flame,
+  Layers,
+  Zap,
+  Filter,
 } from 'lucide-react';
 import { SoundscapeProject } from '../types/soundscape';
 import { ButterchurnVisualizer } from './ButterchurnVisualizer';
 import { audioEngine } from '../services/audioEngine';
-import butterchurnPresets from 'butterchurn-presets';
-
-const getButterchurnPresets = () => {
-  const mod: any = butterchurnPresets;
-  if (mod && typeof mod.getPresets === 'function') return mod;
-  if (mod?.default && typeof mod.default.getPresets === 'function') return mod.default;
-  if (typeof (window as any).butterchurnPresets?.getPresets === 'function')
-    return (window as any).butterchurnPresets;
-  return mod?.default || mod;
-};
+import {
+  milkdropPresetService,
+  PresetCategory,
+  PresetMetadata,
+} from '../services/milkdropPresetService';
 
 interface ZenModeViewProps {
   project: SoundscapeProject;
@@ -69,29 +69,24 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
 
   // Modern GPU Visualizer Preset State
   const [currentPresetName, setCurrentPresetName] = useState<string>('');
-  const [presetsList, setPresetsList] = useState<string[]>([]);
   const [autoCycle, setAutoCycle] = useState<boolean>(true);
+  const [onlyReactive, setOnlyReactive] = useState<boolean>(() =>
+    milkdropPresetService.getOnlyReactiveMode()
+  );
+  const [favorites, setFavorites] = useState<string[]>(() =>
+    milkdropPresetService.getFavorites()
+  );
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [activeCategory, setActiveCategory] = useState<PresetCategory>('all');
+  const [packFilter, setPackFilter] = useState<string>('all');
 
   // Live Tab Audio Capture State
   const [isTabAudioActive, setIsTabAudioActive] = useState<boolean>(() =>
     audioEngine.isLiveTabAudioActive()
   );
 
-  // Load Presets List for the Zen Preset Explorer
-  useEffect(() => {
-    try {
-      const presetsEngine = getButterchurnPresets();
-      const allPresets = presetsEngine?.getPresets ? presetsEngine.getPresets() : {};
-      const names = Object.keys(allPresets);
-      setPresetsList(names);
-    } catch (e) {
-      console.warn('Error cargando presets de MilkDrop en Zen:', e);
-    }
-  }, []);
-
-  // Listen to preset updates from ButterchurnVisualizer
+  // Listen to preset updates & favorites from ButterchurnVisualizer & Service
   useEffect(() => {
     const handlePresetChange = (e: any) => {
       if (e.detail?.name) {
@@ -100,18 +95,33 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
       if (e.detail?.autoCycle !== undefined) {
         setAutoCycle(e.detail.autoCycle);
       }
+      if (e.detail?.onlyReactive !== undefined) {
+        setOnlyReactive(e.detail.onlyReactive);
+      }
     };
 
     const handleTabAudioChange = (e: any) => {
       setIsTabAudioActive(e.detail?.active ?? audioEngine.isLiveTabAudioActive());
     };
 
+    const handleFavsChange = (e: any) => {
+      setFavorites(e.detail?.favorites || milkdropPresetService.getFavorites());
+    };
+
+    const handleReactiveChange = (e: any) => {
+      setOnlyReactive(e.detail?.onlyReactive ?? milkdropPresetService.getOnlyReactiveMode());
+    };
+
     window.addEventListener('butterchurn_preset_changed', handlePresetChange);
     window.addEventListener('tab_audio_capture_changed', handleTabAudioChange);
+    window.addEventListener('butterchurn_favorites_changed', handleFavsChange);
+    window.addEventListener('butterchurn_reactive_mode_changed', handleReactiveChange);
 
     return () => {
       window.removeEventListener('butterchurn_preset_changed', handlePresetChange);
       window.removeEventListener('tab_audio_capture_changed', handleTabAudioChange);
+      window.removeEventListener('butterchurn_favorites_changed', handleFavsChange);
+      window.removeEventListener('butterchurn_reactive_mode_changed', handleReactiveChange);
     };
   }, []);
 
@@ -191,6 +201,19 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
     setAutoCycle((v) => !v);
   };
 
+  const handleToggleReactiveMode = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const next = !onlyReactive;
+    setOnlyReactive(next);
+    milkdropPresetService.setOnlyReactiveMode(next);
+  };
+
+  const handleToggleFavorite = (name = currentPresetName, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (!name) return;
+    milkdropPresetService.toggleFavorite(name);
+  };
+
   const handleSelectPreset = (name: string) => {
     window.dispatchEvent(
       new CustomEvent('butterchurn_select_preset', { detail: { name, blend: 2.0 } })
@@ -225,11 +248,15 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
         handleRandomPreset();
       } else if (e.key.toLowerCase() === 'f') {
         toggleFullscreen();
+      } else if (e.key.toLowerCase() === 'b') {
+        handleToggleReactiveMode();
+      } else if (e.key.toLowerCase() === 's' || e.key === '*') {
+        handleToggleFavorite();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSearchOpen, onTogglePlay, onExitZen]);
+  }, [isSearchOpen, onTogglePlay, onExitZen, currentPresetName, onlyReactive]);
 
   const formatRemaining = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -237,12 +264,26 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Filter presets for search modal
-  const filteredPresets = useMemo(() => {
-    if (!searchQuery.trim()) return presetsList.slice(0, 80);
-    const q = searchQuery.toLowerCase();
-    return presetsList.filter((p) => p.toLowerCase().includes(q)).slice(0, 100);
-  }, [presetsList, searchQuery]);
+  // Filtered presets for modal using milkdropPresetService
+  const filteredMetas = useMemo(() => {
+    return milkdropPresetService.filterPresets({
+      category: activeCategory,
+      searchQuery,
+      packFilter,
+    });
+  }, [activeCategory, searchQuery, packFilter, favorites]);
+
+  const currentMeta = useMemo(() => {
+    return milkdropPresetService.getMetadata(currentPresetName);
+  }, [currentPresetName]);
+
+  const isCurrentFavorite = useMemo(() => {
+    return favorites.includes(currentPresetName);
+  }, [favorites, currentPresetName]);
+
+  const reactiveCount = useMemo(() => {
+    return milkdropPresetService.getReactivePresetNames().length;
+  }, []);
 
   return (
     <div
@@ -268,7 +309,7 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
           showControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
         }`}
       >
-        {/* Left: Sanctuary Brand & GPU MilkDrop Status */}
+        {/* Left: Sanctuary Brand & GPU MilkDrop Status + Preset Info */}
         <div className="flex items-center gap-2.5 pointer-events-auto bg-slate-950/85 border border-slate-800/80 backdrop-blur-2xl px-3.5 py-2 rounded-2xl shadow-2xl">
           <span className="p-1.5 rounded-xl bg-cyan-950/80 border border-cyan-500/40 text-cyan-400">
             <Sparkles className="w-3.5 h-3.5 animate-pulse" />
@@ -282,18 +323,61 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
                 <Cpu className="w-2.5 h-2.5 text-cyan-400" />
                 Nvidia GPU
               </span>
+              {currentMeta?.isReactive && (
+                <span className="px-1.5 py-0.2 rounded-md bg-orange-950/90 text-[10px] text-orange-400 font-bold border border-orange-500/40 flex items-center gap-0.5">
+                  <Flame className="w-2.5 h-2.5" /> {currentMeta.score}% Reactivo
+                </span>
+              )}
             </div>
-            <p
-              className="text-[10px] text-slate-400 font-mono truncate max-w-[150px] sm:max-w-xs"
-              title={currentPresetName}
-            >
-              {currentPresetName.replace(/_/g, ' ') || project.name}
-            </p>
+            <div className="flex items-center gap-1.5">
+              <p
+                className="text-[10px] text-slate-300 font-mono truncate max-w-[140px] sm:max-w-xs"
+                title={currentPresetName}
+              >
+                {currentPresetName.replace(/_/g, ' ') || project.name}
+              </p>
+              <button
+                onClick={(e) => handleToggleFavorite(currentPresetName, e)}
+                title={isCurrentFavorite ? 'Quitar de favoritos (S)' : 'Guardar en mis favoritos (S)'}
+                className={`p-0.5 rounded transition-transform cursor-pointer ${
+                  isCurrentFavorite
+                    ? 'text-amber-400 hover:scale-125'
+                    : 'text-slate-500 hover:text-amber-300 hover:scale-110'
+                }`}
+              >
+                <Star
+                  className={`w-3.5 h-3.5 ${isCurrentFavorite ? 'fill-amber-400 text-amber-400' : ''}`}
+                />
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Center: MilkDrop 2 GPU Preset Controls Toolbar */}
-        <div className="flex items-center gap-1 pointer-events-auto bg-slate-950/85 border border-slate-800/80 backdrop-blur-2xl px-2 py-1.5 rounded-2xl shadow-2xl">
+        {/* Center: MilkDrop 2 GPU Preset Controls Toolbar + Beat Sync Mode */}
+        <div className="flex items-center gap-1.5 pointer-events-auto bg-slate-950/85 border border-slate-800/80 backdrop-blur-2xl px-2.5 py-1.5 rounded-2xl shadow-2xl">
+          {/* Audio-Reactive Beat Sync Toggle */}
+          <button
+            onClick={handleToggleReactiveMode}
+            title={
+              onlyReactive
+                ? 'Modo Beat Sync ACTIVO: Solo se reproducen presets reactivos al ritmo y graves. Clic o letra B para desactivar.'
+                : 'Activar Modo Beat Sync: Restringir a presets altamente reactivos al sonido (letra B).'
+            }
+            className={`flex items-center gap-1 px-2 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer border ${
+              onlyReactive
+                ? 'bg-orange-950/90 border-orange-500 text-orange-300 shadow-md shadow-orange-500/25 ring-1 ring-orange-500/40'
+                : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-orange-300 hover:bg-slate-800'
+            }`}
+          >
+            <Flame className={`w-3.5 h-3.5 ${onlyReactive ? 'text-orange-400 fill-orange-400 animate-bounce' : ''}`} />
+            <span className="text-[10px] font-bold hidden sm:inline">
+              {onlyReactive ? 'Beat Sync ON' : 'Beat Sync'}
+            </span>
+          </button>
+
+          <span className="w-px h-4 bg-slate-800 mx-0.5" />
+
+          {/* Prev / Random / Next Navigation */}
           <button
             onClick={handlePrevPreset}
             title="Preset anterior (Flecha Izquierda / P)"
@@ -315,7 +399,9 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
           >
             <ChevronRight className="w-4 h-4" />
           </button>
-          <span className="w-px h-4 bg-slate-800 mx-1" />
+
+          <span className="w-px h-4 bg-slate-800 mx-0.5" />
+
           <button
             onClick={handleToggleAutoCycle}
             title={autoCycle ? 'Auto-cambio activo cada 20s' : 'Auto-cambio desactivado'}
@@ -326,20 +412,21 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
             <Clock className="w-3.5 h-3.5" />
             <span className="text-[10px] font-mono hidden md:inline">20s</span>
           </button>
+
           <button
             onClick={(e) => {
               e.stopPropagation();
               setIsSearchOpen(true);
             }}
-            title="Explorar biblioteca de presets de MilkDrop"
+            title="Explorar biblioteca de presets de MilkDrop (500 disponibles)"
             className="p-1.5 hover:bg-slate-800/80 text-slate-300 hover:text-white rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 text-xs"
           >
             <List className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="text-[11px] font-medium hidden sm:inline">Presets</span>
+            <span className="text-[11px] font-medium hidden sm:inline">Presets (500)</span>
           </button>
         </div>
 
-        {/* Right Tools: Tab Audio Sync, Timer, Fullscreen & Exit */}
+        {/* Right Tools: Tab Audio Sync, Timer, Pin, Fullscreen & Exit */}
         <div className="flex items-center gap-2 pointer-events-auto">
           {/* Live Tab Audio Capture (YouTube In-Sync) Button */}
           <button
@@ -385,7 +472,9 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
                 ? 'bg-cyan-950/90 border-cyan-500/60 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
                 : 'bg-slate-950/85 hover:bg-slate-900 border-slate-800/80 text-slate-400 hover:text-white'
             }`}
-            title={isPinnedControls ? 'Controles fijados (visibles siempre)' : 'Fijar controles en pantalla'}
+            title={
+              isPinnedControls ? 'Controles fijados (visibles siempre)' : 'Fijar controles en pantalla'
+            }
           >
             <Pin className="w-4 h-4" />
           </button>
@@ -496,6 +585,19 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
             <Shuffle className="w-4 h-4" />
           </button>
 
+          {/* Quick Favorite current preset toggle */}
+          <button
+            onClick={() => handleToggleFavorite(currentPresetName)}
+            title={isCurrentFavorite ? 'Quitar de favoritos (S)' : 'Guardar en favoritos (S)'}
+            className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+              isCurrentFavorite
+                ? 'bg-amber-950/90 border-amber-500 text-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.25)]'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-amber-300'
+            }`}
+          >
+            <Star className={`w-4 h-4 ${isCurrentFavorite ? 'fill-amber-400' : ''}`} />
+          </button>
+
           {/* Sleep / Pomodoro Timer Launcher */}
           <button
             onClick={onOpenTimerModal}
@@ -512,66 +614,249 @@ export const ZenModeView: React.FC<ZenModeViewProps> = ({
 
         {/* Subtle Micro-hint */}
         <p className="text-[10px] text-slate-500 mt-2 pointer-events-auto">
-          Clic en el fondo para cambiar preset · Espacio: Pausa · Esc: Salir
+          Clic en el fondo: siguiente preset · B: Modo Beat Sync · S: Favorito · Espacio: Pausa · Esc: Salir
         </p>
       </div>
 
-      {/* Preset Explorer / Search Modal inside Zen Mode */}
+      {/* Preset Explorer Modal inside Zen Mode (500+ presets, categories, search, packs) */}
       {isSearchOpen && (
         <div
-          className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl p-4 sm:p-8 flex flex-col justify-center items-center animate-fade-in"
+          className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-2xl p-3 sm:p-6 flex flex-col justify-center items-center animate-fade-in"
           onClick={() => setIsSearchOpen(false)}
         >
           <div
-            className="w-full max-w-xl max-h-[80vh] bg-slate-900 border border-slate-800 rounded-3xl p-5 flex flex-col shadow-2xl"
+            className="w-full max-w-4xl max-h-[88vh] bg-slate-900/95 border border-slate-800 rounded-3xl p-4 sm:p-6 flex flex-col shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-cyan-400" />
-                <h3 className="text-sm font-bold text-slate-100">
-                  Biblioteca de Presets MilkDrop 2 (GPU)
-                </h3>
-                <span className="text-xs text-slate-400">({presetsList.length})</span>
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center">
+                  <Sparkles className="w-4 h-4 text-cyan-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                    Colección MilkDrop 2 GPU & Shaders
+                    <span className="px-2 py-0.5 rounded-full bg-cyan-950 text-[10px] text-cyan-300 font-mono border border-cyan-500/40">
+                      500 Presets
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Selecciona shaders con sincronización rítmica, geometría 3D o guarda tus favoritos
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setIsSearchOpen(false)}
-                className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="relative my-3">
-              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Buscar preset (ej: geiss, cosmic, flexi, wave, plasma, tunnel)..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
-                autoFocus
-              />
+            {/* Category Tabs */}
+            <div className="flex items-center gap-1.5 py-2.5 overflow-x-auto custom-scrollbar shrink-0">
+              <button
+                onClick={() => setActiveCategory('all')}
+                className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 border ${
+                  activeCategory === 'all'
+                    ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 shadow-md shadow-cyan-500/10'
+                    : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                Todos (500)
+              </button>
+
+              <button
+                onClick={() => setActiveCategory('reactive')}
+                className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 border ${
+                  activeCategory === 'reactive'
+                    ? 'bg-orange-500/25 border-orange-500 text-orange-300 shadow-md shadow-orange-500/15'
+                    : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-orange-300 hover:bg-slate-800'
+                }`}
+              >
+                <Flame className="w-3.5 h-3.5 text-orange-400" />
+                🔥 Ultra-Reactivos ({reactiveCount})
+              </button>
+
+              <button
+                onClick={() => setActiveCategory('favorites')}
+                className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 border ${
+                  activeCategory === 'favorites'
+                    ? 'bg-amber-500/25 border-amber-500 text-amber-300 shadow-md shadow-amber-500/15'
+                    : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-amber-300 hover:bg-slate-800'
+                }`}
+              >
+                <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                Mis Favoritos ({favorites.length})
+              </button>
+
+              <button
+                onClick={() => setActiveCategory('tunnels')}
+                className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 border ${
+                  activeCategory === 'tunnels'
+                    ? 'bg-indigo-500/25 border-indigo-500 text-indigo-300'
+                    : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-indigo-300 hover:bg-slate-800'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5" />
+                Túneles & 3D
+              </button>
+
+              <button
+                onClick={() => setActiveCategory('psychedelic')}
+                className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 border ${
+                  activeCategory === 'psychedelic'
+                    ? 'bg-fuchsia-500/25 border-fuchsia-500 text-fuchsia-300'
+                    : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-fuchsia-300 hover:bg-slate-800'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Psicodélicos
+              </button>
+
+              <button
+                onClick={() => setActiveCategory('ambient')}
+                className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 border ${
+                  activeCategory === 'ambient'
+                    ? 'bg-teal-500/25 border-teal-500 text-teal-300'
+                    : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-teal-300 hover:bg-slate-800'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                Ambiental
+              </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-1 pr-1 custom-scrollbar max-h-[50vh]">
-              {filteredPresets.map((name) => {
-                const isSelected = name === currentPresetName;
-                return (
+            {/* Search & Pack Filters Toolbar */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 my-2 shrink-0">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Buscar por nombre, autor (Geiss, Rovastar, Flexi, Martin, Idiot)..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700/80 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                  autoFocus
+                />
+                {searchQuery && (
                   <button
-                    key={name}
-                    onClick={() => handleSelectPreset(name)}
-                    className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${
-                      isSelected
-                        ? 'bg-cyan-950/90 text-cyan-300 font-semibold border border-cyan-500/50'
-                        : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
-                    }`}
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
                   >
-                    <span className="font-mono truncate">{name.replace(/_/g, ' ')}</span>
-                    {isSelected && <Check className="w-4 h-4 text-cyan-400 shrink-0" />}
+                    <X className="w-3.5 h-3.5" />
                   </button>
-                );
-              })}
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 bg-slate-950 border border-slate-700/80 px-2.5 py-1.5 rounded-xl text-xs">
+                  <Filter className="w-3.5 h-3.5 text-slate-400" />
+                  <select
+                    value={packFilter}
+                    onChange={(e) => setPackFilter(e.target.value)}
+                    className="bg-transparent text-slate-300 text-xs focus:outline-none cursor-pointer"
+                  >
+                    <option value="all">Todos los Packs</option>
+                    <option value="Esenciales MilkDrop 2">Esenciales MilkDrop 2 (100)</option>
+                    <option value="Comunidad Ultra-Reactivos">Comunidad Ultra-Reactivos (105)</option>
+                    <option value="Extra Pack I">Extra Pack I (146)</option>
+                    <option value="Extra Pack II">Extra Pack II (122)</option>
+                    <option value="Retro MD1 Clásicos">Retro MD1 Clásicos (87)</option>
+                    <option value="HD Non-Minimal">HD Non-Minimal (71)</option>
+                  </select>
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (filteredMetas.length > 0) {
+                      const rand =
+                        filteredMetas[Math.floor(Math.random() * filteredMetas.length)];
+                      handleSelectPreset(rand.name);
+                    }
+                  }}
+                  title="Cargar un preset aleatorio dentro de este filtro"
+                  className="px-3 py-1.5 rounded-xl bg-cyan-600/30 hover:bg-cyan-600/50 border border-cyan-500/50 text-cyan-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                >
+                  <Shuffle className="w-3.5 h-3.5" />
+                  <span>Azar en Filtro</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Presets Grid */}
+            <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 custom-scrollbar my-1">
+              {filteredMetas.length === 0 ? (
+                <div className="col-span-full py-12 text-center text-slate-500 text-xs flex flex-col items-center gap-2">
+                  <Layers className="w-8 h-8 text-slate-700" />
+                  <span>No se encontraron presets para los filtros seleccionados.</span>
+                  {activeCategory === 'favorites' && (
+                    <span className="text-[11px] text-amber-400/80">
+                      Haz clic en la estrella ⭐ de cualquier preset para añadirlo a tus favoritos.
+                    </span>
+                  )}
+                </div>
+              ) : (
+                filteredMetas.map((item) => {
+                  const isSelected = item.name === currentPresetName;
+                  const isFav = favorites.includes(item.name);
+
+                  return (
+                    <div
+                      key={item.name}
+                      onClick={() => handleSelectPreset(item.name)}
+                      className={`p-2.5 rounded-xl text-xs flex flex-col justify-between gap-1.5 transition-all cursor-pointer border ${
+                        isSelected
+                          ? 'bg-cyan-950/90 border-cyan-500/70 shadow-lg shadow-cyan-500/20 ring-1 ring-cyan-500/40'
+                          : 'bg-slate-950/60 border-slate-800/80 hover:bg-slate-850 hover:border-slate-700 text-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span
+                          className={`font-mono text-[11px] font-semibold leading-tight line-clamp-2 ${
+                            isSelected ? 'text-cyan-300' : 'text-slate-200'
+                          }`}
+                          title={item.name}
+                        >
+                          {item.name.replace(/_/g, ' ')}
+                        </span>
+                        <button
+                          onClick={(e) => handleToggleFavorite(item.name, e)}
+                          title={isFav ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                          className={`p-1 rounded-lg transition-transform hover:scale-125 cursor-pointer shrink-0 ${
+                            isFav
+                              ? 'text-amber-400'
+                              : 'text-slate-600 hover:text-amber-300'
+                          }`}
+                        >
+                          <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-amber-400' : ''}`} />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/50">
+                        <span className="truncate max-w-[120px] text-slate-400 font-mono">
+                          {item.author}
+                        </span>
+
+                        <div className="flex items-center gap-1">
+                          {item.isReactive ? (
+                            <span className="px-1.5 py-0.2 rounded bg-orange-950/80 border border-orange-500/40 text-orange-400 font-bold flex items-center gap-0.5">
+                              <Flame className="w-2.5 h-2.5" /> {item.score}%
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.2 rounded bg-slate-800/60 text-slate-400">
+                              {item.score}%
+                            </span>
+                          )}
+                          {isSelected && <Check className="w-3.5 h-3.5 text-cyan-400 ml-1" />}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>

@@ -1,7 +1,11 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import butterchurn from 'butterchurn';
-import butterchurnPresets from 'butterchurn-presets';
 import { audioEngine } from '../services/audioEngine';
+import {
+  milkdropPresetService,
+  PresetCategory,
+  PresetMetadata,
+} from '../services/milkdropPresetService';
 import { ChannelTrack } from '../types/soundscape';
 import {
   Sparkles,
@@ -16,8 +20,12 @@ import {
   Radio,
   Cpu,
   Clock,
-  Activity,
   Check,
+  Star,
+  Flame,
+  Filter,
+  Layers,
+  Zap,
 } from 'lucide-react';
 
 const getButterchurn = () => {
@@ -25,14 +33,6 @@ const getButterchurn = () => {
   if (mod && typeof mod.createVisualizer === 'function') return mod;
   if (mod?.default && typeof mod.default.createVisualizer === 'function') return mod.default;
   if (typeof (window as any).butterchurn?.createVisualizer === 'function') return (window as any).butterchurn;
-  return mod?.default || mod;
-};
-
-const getButterchurnPresets = () => {
-  const mod: any = butterchurnPresets;
-  if (mod && typeof mod.getPresets === 'function') return mod;
-  if (mod?.default && typeof mod.default.getPresets === 'function') return mod.default;
-  if (typeof (window as any).butterchurnPresets?.getPresets === 'function') return (window as any).butterchurnPresets;
   return mod?.default || mod;
 };
 
@@ -61,13 +61,20 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
   const isPlayingRef = useRef<boolean>(isPlaying);
   const masterVolumeRef = useRef<number>(masterVolume);
 
-  // Preset State
+  // Preset & Service State
   const [currentPresetName, setCurrentPresetName] = useState<string>('');
-  const [presetsList, setPresetsList] = useState<string[]>([]);
   const [autoCycle, setAutoCycle] = useState<boolean>(true);
+  const [onlyReactive, setOnlyReactive] = useState<boolean>(() =>
+    milkdropPresetService.getOnlyReactiveMode()
+  );
+  const [favorites, setFavorites] = useState<string[]>(() =>
+    milkdropPresetService.getFavorites()
+  );
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [activeCategory, setActiveCategory] = useState<PresetCategory>('all');
+  const [packFilter, setPackFilter] = useState<string>('all');
   const [showControls, setShowControls] = useState<boolean>(true);
   const controlsTimeoutRef = useRef<any>(null);
 
@@ -78,6 +85,7 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
   const [tabAudioError, setTabAudioError] = useState<string | null>(null);
 
   const presetsMapRef = useRef<Record<string, any>>({});
+  const allNamesRef = useRef<string[]>([]);
 
   // Keep refs updated for animation loop
   useEffect(() => {
@@ -101,27 +109,43 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
     };
   }, []);
 
-  // Load Presets Map
+  // Listen for favorites changes & reactive mode changes
+  useEffect(() => {
+    const handleFavs = (e: any) => {
+      setFavorites(e.detail?.favorites || milkdropPresetService.getFavorites());
+    };
+    const handleReactive = (e: any) => {
+      setOnlyReactive(e.detail?.onlyReactive ?? milkdropPresetService.getOnlyReactiveMode());
+    };
+
+    window.addEventListener('butterchurn_favorites_changed', handleFavs);
+    window.addEventListener('butterchurn_reactive_mode_changed', handleReactive);
+
+    return () => {
+      window.removeEventListener('butterchurn_favorites_changed', handleFavs);
+      window.removeEventListener('butterchurn_reactive_mode_changed', handleReactive);
+    };
+  }, []);
+
+  // Load Presets Map from milkdropPresetService (500 presets)
   useEffect(() => {
     try {
-      const presetsEngine = getButterchurnPresets();
-      const allPresets = presetsEngine?.getPresets ? presetsEngine.getPresets() : {};
+      const allPresets = milkdropPresetService.getAllPresetsMap();
       presetsMapRef.current = allPresets;
       const names = Object.keys(allPresets);
-      setPresetsList(names);
+      allNamesRef.current = names;
 
-      if (names.length > 0) {
-        // Pick an energetic, beautiful default preset
-        const preferred = names.find((n) =>
-          /flexi|martin|geiss|cosmic|plasma|tunnel|nebula/i.test(n)
-        );
-        const initial = preferred || names[Math.floor(Math.random() * names.length)];
-        setCurrentPresetName(initial);
+      if (names.length > 0 && !currentPresetName) {
+        // Pick a premier ultra-reactive default preset
+        const preferred =
+          names.find((n) => /Star Nova|Marphets|Altars of Madness|Star Forge|glowsticks/i.test(n)) ||
+          names[0];
+        setCurrentPresetName(preferred);
       }
     } catch (e) {
-      console.warn('Error loading Butterchurn presets:', e);
+      console.warn('Error cargando presets de MilkDrop:', e);
     }
-  }, []);
+  }, [currentPresetName]);
 
   // Initialize WebGL MilkDrop Visualizer Engine
   useEffect(() => {
@@ -202,14 +226,23 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
   }, []);
 
   // Preset Transition Helper
-  const selectPreset = (name: string, blend = 2.2) => {
+  const selectPreset = (name: string, blend = 2.0) => {
     if (!name || !presetsMapRef.current[name] || !visualizerRef.current) return;
     try {
       visualizerRef.current.loadPreset(presetsMapRef.current[name], blend);
       setCurrentPresetName(name);
+      const isFav = milkdropPresetService.isFavorite(name);
+      const meta = milkdropPresetService.getMetadata(name);
       window.dispatchEvent(
         new CustomEvent('butterchurn_preset_changed', {
-          detail: { name, autoCycle, totalPresets: presetsList.length },
+          detail: {
+            name,
+            autoCycle,
+            totalPresets: allNamesRef.current.length,
+            isFavorite: isFav,
+            onlyReactive,
+            metadata: meta,
+          },
         })
       );
     } catch (e) {
@@ -218,40 +251,60 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
   };
 
   const handleNextPreset = () => {
-    if (presetsList.length === 0) return;
-    const currIdx = presetsList.indexOf(currentPresetName);
-    const nextIdx = (currIdx + 1) % presetsList.length;
-    selectPreset(presetsList[nextIdx], 2.0);
+    const next = milkdropPresetService.getNextPreset(currentPresetName, { onlyReactive });
+    if (next && next !== currentPresetName) {
+      selectPreset(next, 2.0);
+    }
   };
 
   const handlePrevPreset = () => {
-    if (presetsList.length === 0) return;
-    const currIdx = presetsList.indexOf(currentPresetName);
-    const prevIdx = (currIdx - 1 + presetsList.length) % presetsList.length;
-    selectPreset(presetsList[prevIdx], 2.0);
+    const prev = milkdropPresetService.getPrevPreset(currentPresetName, { onlyReactive });
+    if (prev && prev !== currentPresetName) {
+      selectPreset(prev, 2.0);
+    }
   };
 
-  const handleRandomPreset = () => {
-    if (presetsList.length === 0) return;
-    const rand = presetsList[Math.floor(Math.random() * presetsList.length)];
-    selectPreset(rand, 2.5);
+  const handleRandomPreset = (options?: { onlyFavorites?: boolean }) => {
+    const rand = milkdropPresetService.getRandomPreset({
+      onlyReactive,
+      onlyFavorites: options?.onlyFavorites,
+      excludeCurrent: currentPresetName,
+    });
+    if (rand) {
+      selectPreset(rand, 2.4);
+    }
+  };
+
+  const handleToggleFavorite = (presetName = currentPresetName) => {
+    if (!presetName) return;
+    milkdropPresetService.toggleFavorite(presetName);
+  };
+
+  const handleToggleReactiveMode = () => {
+    const next = !onlyReactive;
+    setOnlyReactive(next);
+    milkdropPresetService.setOnlyReactiveMode(next);
   };
 
   // Sync preset changes with external listeners (e.g. ZenModeView)
   useEffect(() => {
     const handleNext = () => handleNextPreset();
     const handlePrev = () => handlePrevPreset();
-    const handleRandom = () => handleRandomPreset();
+    const handleRandom = (e: any) => handleRandomPreset({ onlyFavorites: e.detail?.onlyFavorites });
     const handleSelect = (e: any) => {
       if (e.detail?.name) selectPreset(e.detail.name, e.detail.blend ?? 2.0);
     };
     const handleToggleAuto = () => setAutoCycle((v) => !v);
+    const handleToggleReactive = () => handleToggleReactiveMode();
+    const handleToggleFav = (e: any) => handleToggleFavorite(e.detail?.name || currentPresetName);
 
     window.addEventListener('butterchurn_next_preset', handleNext);
     window.addEventListener('butterchurn_prev_preset', handlePrev);
     window.addEventListener('butterchurn_random_preset', handleRandom);
     window.addEventListener('butterchurn_select_preset', handleSelect);
     window.addEventListener('butterchurn_toggle_autocycle', handleToggleAuto);
+    window.addEventListener('butterchurn_toggle_reactive_mode', handleToggleReactive);
+    window.addEventListener('butterchurn_toggle_favorite', handleToggleFav);
 
     return () => {
       window.removeEventListener('butterchurn_next_preset', handleNext);
@@ -259,28 +312,39 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
       window.removeEventListener('butterchurn_random_preset', handleRandom);
       window.removeEventListener('butterchurn_select_preset', handleSelect);
       window.removeEventListener('butterchurn_toggle_autocycle', handleToggleAuto);
+      window.removeEventListener('butterchurn_toggle_reactive_mode', handleToggleReactive);
+      window.removeEventListener('butterchurn_toggle_favorite', handleToggleFav);
     };
-  }, [presetsList, currentPresetName, autoCycle]);
+  }, [currentPresetName, autoCycle, onlyReactive]);
 
   // Notify listeners when currentPresetName is initialized
   useEffect(() => {
     if (currentPresetName) {
+      const isFav = milkdropPresetService.isFavorite(currentPresetName);
+      const meta = milkdropPresetService.getMetadata(currentPresetName);
       window.dispatchEvent(
         new CustomEvent('butterchurn_preset_changed', {
-          detail: { name: currentPresetName, autoCycle, totalPresets: presetsList.length },
+          detail: {
+            name: currentPresetName,
+            autoCycle,
+            totalPresets: allNamesRef.current.length,
+            isFavorite: isFav,
+            onlyReactive,
+            metadata: meta,
+          },
         })
       );
     }
-  }, [currentPresetName, autoCycle, presetsList.length]);
+  }, [currentPresetName, autoCycle, onlyReactive]);
 
   // Auto-cycle presets every 20s
   useEffect(() => {
-    if (!autoCycle || presetsList.length === 0 || !isPlaying) return;
+    if (!autoCycle || allNamesRef.current.length === 0 || !isPlaying) return;
     const timer = setInterval(() => {
       handleNextPreset();
     }, 20000);
     return () => clearInterval(timer);
-  }, [autoCycle, presetsList, isPlaying, currentPresetName]);
+  }, [autoCycle, isPlaying, currentPresetName, onlyReactive]);
 
   // Fullscreen toggle
   const toggleFullscreen = async () => {
@@ -333,12 +397,26 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
     }, 3500);
   };
 
-  // Filtered presets for search modal
-  const filteredPresets = useMemo(() => {
-    if (!searchQuery.trim()) return presetsList.slice(0, 80);
-    const q = searchQuery.toLowerCase();
-    return presetsList.filter((p) => p.toLowerCase().includes(q)).slice(0, 100);
-  }, [presetsList, searchQuery]);
+  // Filtered Presets for Explorer modal
+  const filteredMetas = useMemo(() => {
+    return milkdropPresetService.filterPresets({
+      category: activeCategory,
+      searchQuery,
+      packFilter,
+    });
+  }, [activeCategory, searchQuery, packFilter, favorites]);
+
+  const currentMeta = useMemo(() => {
+    return milkdropPresetService.getMetadata(currentPresetName);
+  }, [currentPresetName]);
+
+  const isCurrentFavorite = useMemo(() => {
+    return favorites.includes(currentPresetName);
+  }, [favorites, currentPresetName]);
+
+  const reactiveCount = useMemo(() => {
+    return milkdropPresetService.getReactivePresetNames().length;
+  }, []);
 
   return (
     <div
@@ -349,7 +427,11 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
       } rounded-2xl overflow-hidden bg-black select-none group shadow-2xl border border-slate-800/80`}
     >
       {/* WebGL MilkDrop Canvas Rendered by Nvidia GPU */}
-      <canvas ref={canvasRef} className="w-full h-full block cursor-pointer" onClick={handleNextPreset} />
+      <canvas
+        ref={canvasRef}
+        className="w-full h-full block cursor-pointer"
+        onClick={handleNextPreset}
+      />
 
       {/* Internal Dashboard HUD (hidden in Zen mode where ZenModeView has its own full HUD) */}
       {shouldShowHud && (
@@ -357,32 +439,74 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
           {/* Top Floating HUD Bar */}
           <div
             className={`absolute top-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 transition-all duration-300 ${
-              showControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'
+              showControls
+                ? 'opacity-100 translate-y-0'
+                : 'opacity-0 -translate-y-2 pointer-events-none'
             }`}
           >
-            {/* Left: Engine & GPU Badge */}
+            {/* Left: Engine & GPU Badge + Preset Info */}
             <div className="flex items-center gap-2 bg-slate-950/85 backdrop-blur-xl px-3 py-1.5 rounded-xl border border-cyan-500/30 text-xs text-slate-200 shadow-2xl">
-              <Cpu className="w-4 h-4 text-cyan-400 animate-pulse" />
+              <Cpu className="w-4 h-4 text-cyan-400 animate-pulse shrink-0" />
               <div className="flex flex-col">
                 <div className="flex items-center gap-1.5">
                   <span className="font-bold text-[11px] uppercase tracking-wider text-cyan-300">
-                    GPU Nvidia / WebGL
+                    Nvidia GPU MilkDrop 2
                   </span>
                   <span className="px-1.5 py-0.2 rounded-md bg-cyan-950/80 text-[10px] text-cyan-400 font-mono border border-cyan-500/30">
-                    MilkDrop 2
+                    500 Presets
                   </span>
+                  {currentMeta?.isReactive && (
+                    <span className="px-1.5 py-0.2 rounded-md bg-orange-950/80 text-[10px] text-orange-400 font-bold border border-orange-500/40 flex items-center gap-0.5">
+                      <Flame className="w-2.5 h-2.5" /> {currentMeta.score}% Reactivo
+                    </span>
+                  )}
                 </div>
-                <span
-                  className="text-slate-400 font-mono text-[10px] max-w-[200px] sm:max-w-xs truncate"
-                  title={currentPresetName}
-                >
-                  {currentPresetName.replace(/_/g, ' ') || 'Cargando preset...'}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className="text-slate-300 font-mono text-[10px] max-w-[180px] sm:max-w-xs truncate"
+                    title={currentPresetName}
+                  >
+                    {currentPresetName.replace(/_/g, ' ') || 'Cargando preset...'}
+                  </span>
+                  <button
+                    onClick={() => handleToggleFavorite(currentPresetName)}
+                    title={isCurrentFavorite ? 'Quitar de favoritos' : 'Guardar en mis favoritos'}
+                    className={`p-0.5 rounded transition-transform cursor-pointer ${
+                      isCurrentFavorite
+                        ? 'text-amber-400 hover:scale-125'
+                        : 'text-slate-500 hover:text-amber-300 hover:scale-110'
+                    }`}
+                  >
+                    <Star
+                      className={`w-3.5 h-3.5 ${isCurrentFavorite ? 'fill-amber-400 text-amber-400' : ''}`}
+                    />
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Center / Right: Live Tab Audio Sync + Preset Toolbar */}
+            {/* Center / Right: Live Tab Audio Sync + Beat Lock + Preset Toolbar */}
             <div className="flex items-center gap-2">
+              {/* Audio-Reactive Beat Lock Toggle */}
+              <button
+                onClick={handleToggleReactiveMode}
+                title={
+                  onlyReactive
+                    ? 'Modo Beat Sync ACTIVO: Solo se reproducen presets altamente reactivos a graves y ritmo. Clic para desactivar.'
+                    : 'Activar Modo Beat Sync: Filtrar navegación para usar exclusivamente presets hiper-reactivos al sonido.'
+                }
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold backdrop-blur-xl transition-all cursor-pointer shadow-lg border ${
+                  onlyReactive
+                    ? 'bg-orange-950/90 border-orange-500 text-orange-300 shadow-orange-500/25 ring-1 ring-orange-500/50'
+                    : 'bg-slate-950/85 border-slate-800 text-slate-400 hover:text-orange-300 hover:border-orange-500/40'
+                }`}
+              >
+                <Flame className={`w-3.5 h-3.5 ${onlyReactive ? 'text-orange-400 fill-orange-400 animate-bounce' : ''}`} />
+                <span className="text-[11px] font-bold">
+                  {onlyReactive ? 'Beat Sync ON' : 'Beat Sync'}
+                </span>
+              </button>
+
               {/* Live Tab Audio Capture (YouTube In-Sync) Button */}
               <button
                 onClick={handleToggleTabAudio}
@@ -391,15 +515,19 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
                     ? 'Audio de YouTube sincronizado en vivo (1:1). Clic para desactivar.'
                     : 'Sincronizar el audio real de los videos de YouTube de esta pestaña con 1 clic'
                 }
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold backdrop-blur-xl transition-all cursor-pointer shadow-lg border ${
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold backdrop-blur-xl transition-all cursor-pointer shadow-lg border ${
                   isTabAudioActive
                     ? 'bg-emerald-950/90 border-emerald-500 text-emerald-300 shadow-emerald-500/20 animate-pulse'
                     : 'bg-slate-950/85 border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/60 hover:border-cyan-400'
                 }`}
               >
-                <Radio className={`w-3.5 h-3.5 ${isTabAudioActive ? 'text-emerald-400 animate-spin' : 'text-cyan-400'}`} />
+                <Radio
+                  className={`w-3.5 h-3.5 ${
+                    isTabAudioActive ? 'text-emerald-400 animate-spin' : 'text-cyan-400'
+                  }`}
+                />
                 <span className="text-[11px]">
-                  {isTabAudioActive ? 'YouTube en Vivo 1:1' : '⚡ Sincronizar Audio en Vivo'}
+                  {isTabAudioActive ? 'YouTube en Vivo' : '⚡ Audio en Vivo'}
                 </span>
               </button>
 
@@ -413,7 +541,7 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={handleRandomPreset}
+                  onClick={() => handleRandomPreset()}
                   title="Preset aleatorio (Shuffle)"
                   className="p-1.5 hover:bg-slate-800/80 text-cyan-400 hover:text-cyan-200 rounded-lg transition-colors cursor-pointer"
                 >
@@ -438,17 +566,22 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
                 </button>
                 <button
                   onClick={() => setIsSearchOpen(true)}
-                  title="Explorar presets de MilkDrop"
-                  className="p-1.5 hover:bg-slate-800/80 text-slate-300 hover:text-white rounded-lg transition-colors cursor-pointer"
+                  title="Explorador de Presets (500+ presets, filtros y favoritos)"
+                  className="p-1.5 hover:bg-slate-800/80 text-slate-300 hover:text-white rounded-lg transition-colors cursor-pointer flex items-center gap-1"
                 >
                   <List className="w-4 h-4" />
+                  <span className="text-[10px] font-mono text-cyan-400 hidden sm:inline">500</span>
                 </button>
                 <button
                   onClick={toggleFullscreen}
                   title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
                   className="p-1.5 hover:bg-slate-800/80 text-slate-300 hover:text-white rounded-lg transition-colors cursor-pointer"
                 >
-                  {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                  {isFullscreen ? (
+                    <Minimize2 className="w-3.5 h-3.5" />
+                  ) : (
+                    <Maximize2 className="w-3.5 h-3.5" />
+                  )}
                 </button>
               </div>
             </div>
@@ -458,7 +591,10 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
           {tabAudioError && (
             <div className="absolute top-16 right-4 z-40 bg-red-950/90 border border-red-500 text-red-200 text-xs px-3 py-1.5 rounded-xl shadow-xl animate-fade-in flex items-center gap-2">
               <span>{tabAudioError}</span>
-              <button onClick={() => setTabAudioError(null)} className="text-red-400 hover:text-white">
+              <button
+                onClick={() => setTabAudioError(null)}
+                className="text-red-400 hover:text-white"
+              >
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -470,66 +606,263 @@ export const ButterchurnVisualizer: React.FC<ButterchurnVisualizerProps> = ({
               showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
             }`}
           >
-            <div className="flex items-center gap-2 pointer-events-auto bg-slate-950/70 backdrop-blur-md px-3 py-1 rounded-lg border border-slate-800/80 text-[10px]">
+            <div className="flex items-center gap-2 pointer-events-auto bg-slate-950/75 backdrop-blur-md px-3 py-1 rounded-lg border border-slate-800/80 text-[10px]">
               <span className="inline-block w-2 h-2 rounded-full bg-cyan-400 animate-ping mr-1" />
-              <span>Haz clic en cualquier parte del visualizador para cambiar de preset</span>
+              <span>Clic en el lienzo para avanzar • Presiona R para aleatorio</span>
             </div>
 
-            <div className="pointer-events-auto bg-slate-950/70 backdrop-blur-md px-2.5 py-1 rounded-lg border border-slate-800/80 text-[10px] text-slate-400 font-mono">
-              <span>Presets: {presetsList.length}</span>
+            <div className="pointer-events-auto flex items-center gap-2 bg-slate-950/75 backdrop-blur-md px-2.5 py-1 rounded-lg border border-slate-800/80 text-[10px] text-slate-400 font-mono">
+              <span className="text-orange-400 font-bold flex items-center gap-1">
+                <Flame className="w-2.5 h-2.5" /> {reactiveCount} Reactivos
+              </span>
+              <span>•</span>
+              <span className="text-amber-400 flex items-center gap-1">
+                <Star className="w-2.5 h-2.5 fill-amber-400" /> {favorites.length} Favs
+              </span>
+              <span>•</span>
+              <span>Total: 500 Presets</span>
             </div>
           </div>
 
-          {/* Preset Explorer / Search Modal */}
+          {/* Preset Explorer / Search Modal (Massive 500+ Presets Library) */}
           {isSearchOpen && (
-            <div className="absolute inset-0 z-50 bg-slate-950/90 backdrop-blur-md p-4 flex flex-col animate-fade-in">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-cyan-400" />
-                  <h3 className="text-sm font-bold text-slate-100">Presets de MilkDrop 2 (GPU)</h3>
-                  <span className="text-xs text-slate-400">({presetsList.length} disponibles)</span>
+            <div className="absolute inset-0 z-50 bg-slate-950/95 backdrop-blur-xl p-4 sm:p-5 flex flex-col animate-fade-in">
+              {/* Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center">
+                    <Sparkles className="w-4 h-4 text-cyan-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                      Biblioteca MilkDrop 2 & Mega-Packs GPU
+                      <span className="px-2 py-0.5 rounded-full bg-cyan-950 text-[10px] text-cyan-300 font-mono border border-cyan-500/40">
+                        500 Presets
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Explora shaders reactivos, psicodélicos, túneles 3D y tus presets favoritos
+                    </p>
+                  </div>
                 </div>
                 <button
                   onClick={() => setIsSearchOpen(false)}
-                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                  className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="relative my-3">
-                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Buscar preset (ej: geiss, flexi, cosmic, wave, tunnel)..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
-                  autoFocus
-                />
+              {/* Category Filter Tabs */}
+              <div className="flex items-center gap-1.5 py-2.5 overflow-x-auto custom-scrollbar shrink-0">
+                <button
+                  onClick={() => setActiveCategory('all')}
+                  className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    activeCategory === 'all'
+                      ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 shadow-md shadow-cyan-500/10'
+                      : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  Todos (500)
+                </button>
+
+                <button
+                  onClick={() => setActiveCategory('reactive')}
+                  className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    activeCategory === 'reactive'
+                      ? 'bg-orange-500/25 border-orange-500 text-orange-300 shadow-md shadow-orange-500/15'
+                      : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-orange-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <Flame className="w-3.5 h-3.5 text-orange-400" />
+                  🔥 Ultra-Reactivos ({reactiveCount})
+                </button>
+
+                <button
+                  onClick={() => setActiveCategory('favorites')}
+                  className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    activeCategory === 'favorites'
+                      ? 'bg-amber-500/25 border-amber-500 text-amber-300 shadow-md shadow-amber-500/15'
+                      : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-amber-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                  Mis Favoritos ({favorites.length})
+                </button>
+
+                <button
+                  onClick={() => setActiveCategory('tunnels')}
+                  className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    activeCategory === 'tunnels'
+                      ? 'bg-indigo-500/25 border-indigo-500 text-indigo-300'
+                      : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-indigo-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  Túneles & 3D
+                </button>
+
+                <button
+                  onClick={() => setActiveCategory('psychedelic')}
+                  className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    activeCategory === 'psychedelic'
+                      ? 'bg-fuchsia-500/25 border-fuchsia-500 text-fuchsia-300'
+                      : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-fuchsia-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Psicodélicos
+                </button>
+
+                <button
+                  onClick={() => setActiveCategory('ambient')}
+                  className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    activeCategory === 'ambient'
+                      ? 'bg-teal-500/25 border-teal-500 text-teal-300'
+                      : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-teal-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  Ambiental
+                </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                {filteredPresets.map((name) => {
-                  const isSelected = name === currentPresetName;
-                  return (
+              {/* Search & Pack Filters Toolbar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 my-2 shrink-0">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Buscar preset por nombre, autor (Geiss, Rovastar, Flexi, Martin, Idiot)..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                    autoFocus
+                  />
+                  {searchQuery && (
                     <button
-                      key={name}
-                      onClick={() => {
-                        selectPreset(name, 1.8);
-                        setIsSearchOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${
-                        isSelected
-                          ? 'bg-cyan-950/80 text-cyan-300 font-semibold border border-cyan-500/40'
-                          : 'text-slate-300 hover:bg-slate-900 hover:text-white'
-                      }`}
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
                     >
-                      <span className="font-mono truncate">{name.replace(/_/g, ' ')}</span>
-                      {isSelected && <Check className="w-4 h-4 text-cyan-400 shrink-0" />}
+                      <X className="w-3.5 h-3.5" />
                     </button>
-                  );
-                })}
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 bg-slate-900/90 border border-slate-700/80 px-2.5 py-1.5 rounded-xl text-xs">
+                    <Filter className="w-3.5 h-3.5 text-slate-400" />
+                    <select
+                      value={packFilter}
+                      onChange={(e) => setPackFilter(e.target.value)}
+                      className="bg-transparent text-slate-300 text-xs focus:outline-none cursor-pointer"
+                    >
+                      <option value="all">Todos los Packs</option>
+                      <option value="Esenciales MilkDrop 2">Esenciales MilkDrop 2 (100)</option>
+                      <option value="Comunidad Ultra-Reactivos">Comunidad Ultra-Reactivos (105)</option>
+                      <option value="Extra Pack I">Extra Pack I (146)</option>
+                      <option value="Extra Pack II">Extra Pack II (122)</option>
+                      <option value="Retro MD1 Clásicos">Retro MD1 Clásicos (87)</option>
+                      <option value="HD Non-Minimal">HD Non-Minimal (71)</option>
+                    </select>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      if (filteredMetas.length > 0) {
+                        const rand =
+                          filteredMetas[Math.floor(Math.random() * filteredMetas.length)];
+                        selectPreset(rand.name, 2.0);
+                        setIsSearchOpen(false);
+                      }
+                    }}
+                    title="Cargar un preset aleatorio dentro de este filtro"
+                    className="px-3 py-1.5 rounded-xl bg-cyan-600/30 hover:bg-cyan-600/50 border border-cyan-500/50 text-cyan-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                  >
+                    <Shuffle className="w-3.5 h-3.5" />
+                    <span>Azar en Filtro</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Presets Grid */}
+              <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 custom-scrollbar my-1">
+                {filteredMetas.length === 0 ? (
+                  <div className="col-span-full py-12 text-center text-slate-500 text-xs flex flex-col items-center gap-2">
+                    <Layers className="w-8 h-8 text-slate-700" />
+                    <span>No se encontraron presets para los filtros seleccionados.</span>
+                    {activeCategory === 'favorites' && (
+                      <span className="text-[11px] text-amber-400/80">
+                        Haz clic en la estrella ⭐ de cualquier preset para guardarlo aquí.
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  filteredMetas.map((item) => {
+                    const isSelected = item.name === currentPresetName;
+                    const isFav = favorites.includes(item.name);
+
+                    return (
+                      <div
+                        key={item.name}
+                        onClick={() => {
+                          selectPreset(item.name, 2.0);
+                          setIsSearchOpen(false);
+                        }}
+                        className={`p-2.5 rounded-xl text-xs flex flex-col justify-between gap-1.5 transition-all cursor-pointer border ${
+                          isSelected
+                            ? 'bg-cyan-950/80 border-cyan-500/70 shadow-lg shadow-cyan-500/15 ring-1 ring-cyan-500/40'
+                            : 'bg-slate-900/60 border-slate-800/80 hover:bg-slate-850 hover:border-slate-700 text-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span
+                            className={`font-mono text-[11px] font-semibold leading-tight line-clamp-2 ${
+                              isSelected ? 'text-cyan-300' : 'text-slate-200'
+                            }`}
+                            title={item.name}
+                          >
+                            {item.name.replace(/_/g, ' ')}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleFavorite(item.name);
+                            }}
+                            title={isFav ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                            className={`p-1 rounded-lg transition-transform hover:scale-125 cursor-pointer shrink-0 ${
+                              isFav
+                                ? 'text-amber-400'
+                                : 'text-slate-600 hover:text-amber-300'
+                            }`}
+                          >
+                            <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-amber-400' : ''}`} />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/50">
+                          <span className="truncate max-w-[120px] text-slate-400 font-mono">
+                            {item.author}
+                          </span>
+
+                          <div className="flex items-center gap-1">
+                            {item.isReactive ? (
+                              <span className="px-1.5 py-0.2 rounded bg-orange-950/80 border border-orange-500/40 text-orange-400 font-bold flex items-center gap-0.5">
+                                <Flame className="w-2.5 h-2.5" /> {item.score}%
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.2 rounded bg-slate-800/60 text-slate-400">
+                                {item.score}%
+                              </span>
+                            )}
+                            {isSelected && <Check className="w-3.5 h-3.5 text-cyan-400 ml-1" />}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           )}

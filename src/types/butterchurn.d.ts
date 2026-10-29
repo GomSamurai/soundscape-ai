@@ -28,3 +28,31 @@ declare module 'butterchurn-presets' {
   };
   export default presets;
 }
+
+declare module 'butterchurn-presets/lib/butterchurnPresetsExtra.min' {
+  const presets: {
+    getPresets: () => Record<string, any>;
+  };
+  export default presets;
+}
+
+declare module 'butterchurn-presets/lib/butterchurnPresetsExtra2.min' {
+  const presets: {
+    getPresets: () => Record<string, any>;
+  };
+  export default presets;
+}
+
+declare module 'butterchurn-presets/lib/butterchurnPresetsMD1.min' {
+  const presets: {
+    getPresets: () => Record<string, any>;
+  };
+  export default presets;
+}
+
+declare module 'butterchurn-presets/lib/butterchurnPresetsNonMinimal.min' {
+  const presets: {
+    getPresets: () => Record<string, any>;
+  };
+  export default presets;
+}

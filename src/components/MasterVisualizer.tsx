@@ -1,7 +1,54 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { audioEngine } from '../services/audioEngine';
 import { ChannelTrack } from '../types/soundscape';
-import { BarChart2, Activity, Waves, Layers, Disc3 } from 'lucide-react';
+import {
+  VisualizerMode,
+  VisualizerSettings,
+  ColorPaletteId,
+  VisualizerPreset,
+  GlowIntensity,
+  DecaySpeed,
+  BarsResolution,
+  VisualizerHeight,
+} from '../types/visualizer';
+import {
+  COLOR_PALETTES,
+  FACTORY_VISUALIZER_PRESETS,
+  DEFAULT_VISUALIZER_SETTINGS,
+  loadStoredSettings,
+  persistVisualizerSettings,
+  loadUserVisualizerPresets,
+  saveUserVisualizerPresets,
+} from '../constants/visualizerPresets';
+import {
+  BarChart2,
+  Activity,
+  Waves,
+  Layers,
+  Disc3,
+  Sliders,
+  Settings,
+  Palette,
+  Maximize2,
+  Minimize2,
+  Save,
+  Download,
+  Upload,
+  Trash2,
+  Sparkles,
+  Radio,
+  Eye,
+  Crosshair,
+  Flame,
+  Check,
+  X,
+  ChevronDown,
+  Plus,
+  RotateCcw,
+  Sun,
+  Grid,
+} from 'lucide-react';
 
 interface MasterVisualizerProps {
   themeColor?: string;
@@ -11,7 +58,20 @@ interface MasterVisualizerProps {
   tracks?: ChannelTrack[];
 }
 
-export type VisualizerMode = 'spectrum' | 'curve' | 'oscilloscope' | 'waterfall' | 'radial';
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  radius: number;
+  baseRadius: number;
+  colorIdx: number;
+  angle: number;
+  dist: number;
+  speed: number;
+  life: number;
+  maxLife: number;
+}
 
 export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
   themeColor = '#06B6D4',
@@ -21,17 +81,147 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
   tracks = [],
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [mode, setMode] = useState<VisualizerMode>('spectrum');
-  const [peakDb, setPeakDb] = useState<number>(-60);
-  const animationFrameId = useRef<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Ballistics state
-  const peakHoldBars = useRef<number[]>(new Array(64).fill(0));
-  const smoothBars = useRef<number[]>(new Array(64).fill(0));
+  // Settings State (persisted to LocalStorage)
+  const [settings, setSettings] = useState<VisualizerSettings>(() => loadStoredSettings());
+
+  // UI Panels State
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'modes' | 'colors' | 'dynamics' | 'presets'>('modes');
+  const [userPresets, setUserPresets] = useState<VisualizerPreset[]>(() => loadUserVisualizerPresets());
+  const [newPresetName, setNewPresetName] = useState('');
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+
+  // Peak Meter
+  const [peakDb, setPeakDb] = useState<number>(-60);
+  const [stereoCorr, setStereoCorr] = useState<number>(1.0);
+
+  // References for Animation & Memory
+  const animationFrameId = useRef<number | null>(null);
+  const peakHoldBars = useRef<number[]>(new Array(128).fill(0));
+  const smoothBars = useRef<number[]>(new Array(128).fill(0));
   const waterfallHistory = useRef<number[][]>([]);
   const freqBufferRef = useRef<Uint8Array>(new Uint8Array(512));
   const timeBufferRef = useRef<Uint8Array>(new Uint8Array(512));
+  const particlesRef = useRef<Particle[]>([]);
+  const terrainOffsetRef = useRef<number>(0);
+  const tunnelRotRef = useRef<number>(0);
+  const orbPulseRef = useRef<number>(0);
 
+  // Active Color Palette Lookup
+  const activePalette = useMemo(() => {
+    if (settings.paletteId === 'custom') {
+      return {
+        id: 'custom' as ColorPaletteId,
+        name: 'Personalizado',
+        primary: settings.customPrimary || '#06B6D4',
+        secondary: settings.customSecondary || '#EC4899',
+        accent: settings.customAccent || '#FACC15',
+        glow: settings.customPrimary || '#06B6D4',
+        gradient: [
+          settings.customPrimary || '#06B6D4',
+          settings.customSecondary || '#EC4899',
+          settings.customAccent || '#FACC15',
+        ] as [string, string, string],
+      };
+    }
+    return (
+      COLOR_PALETTES.find((p) => p.id === settings.paletteId) || COLOR_PALETTES[0]
+    );
+  }, [settings.paletteId, settings.customPrimary, settings.customSecondary, settings.customAccent]);
+
+  // Update & persist settings helper
+  const updateSettings = useCallback((updates: Partial<VisualizerSettings>) => {
+    setSettings((prev) => {
+      const next = { ...prev, ...updates };
+      persistVisualizerSettings(next);
+      return next;
+    });
+  }, []);
+
+  // Save Preset handler
+  const handleSaveCurrentPreset = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPresetName.trim()) return;
+
+    const newPreset: VisualizerPreset = {
+      id: `user-preset-${Date.now()}`,
+      name: newPresetName.trim(),
+      description: `Preset personalizado (${activePalette.name}, modo ${settings.mode})`,
+      isFactory: false,
+      settings: { ...settings },
+    };
+
+    const updated = [newPreset, ...userPresets];
+    setUserPresets(updated);
+    saveUserVisualizerPresets(updated);
+    setNewPresetName('');
+    setSaveSuccessMsg(`Preset "${newPreset.name}" guardado.`);
+    setTimeout(() => setSaveSuccessMsg(null), 3000);
+  };
+
+  // Delete Preset handler
+  const handleDeletePreset = (id: string) => {
+    const updated = userPresets.filter((p) => p.id !== id);
+    setUserPresets(updated);
+    saveUserVisualizerPresets(updated);
+  };
+
+  // Load Preset
+  const handleApplyPreset = (preset: VisualizerPreset) => {
+    updateSettings(preset.settings);
+    setSaveSuccessMsg(`Preset "${preset.name}" aplicado.`);
+    setTimeout(() => setSaveSuccessMsg(null), 2500);
+  };
+
+  // Export Presets to JSON
+  const handleExportPresets = () => {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(userPresets, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `soundscape_presets_${Date.now()}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  // Import Presets from JSON
+  const handleImportPresets = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const imported = JSON.parse(event.target?.result as string);
+        if (Array.isArray(imported)) {
+          const merged = [...imported, ...userPresets];
+          setUserPresets(merged);
+          saveUserVisualizerPresets(merged);
+          setSaveSuccessMsg(`${imported.length} presets importados.`);
+          setTimeout(() => setSaveSuccessMsg(null), 3000);
+        }
+      } catch (err) {
+        alert('Archivo de presets inválido');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Height class mapping
+  const heightClass = useMemo(() => {
+    switch (settings.heightMode) {
+      case 'compact':
+        return 'h-24 sm:h-28';
+      case 'tall':
+        return 'h-64 sm:h-80';
+      case 'medium':
+      default:
+        return 'h-36 sm:h-44';
+    }
+  }, [settings.heightMode]);
+
+  // Canvas Core Rendering Loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -44,13 +234,47 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
       const rect = canvas.getBoundingClientRect();
       canvas.width = rect.width * dpr;
       canvas.height = rect.height * dpr;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.scale(dpr, dpr);
     };
 
     resize();
     window.addEventListener('resize', resize);
 
-    const BARS_COUNT = 64;
+    const BARS_COUNT = settings.barsCount;
+    if (smoothBars.current.length !== BARS_COUNT) {
+      smoothBars.current = new Array(BARS_COUNT).fill(0);
+      peakHoldBars.current = new Array(BARS_COUNT).fill(0);
+    }
+
+    // Initialize particles if needed
+    if (particlesRef.current.length < 120) {
+      particlesRef.current = Array.from({ length: 120 }, () => ({
+        x: Math.random() * 800,
+        y: Math.random() * 300,
+        vx: (Math.random() - 0.5) * 1.5,
+        vy: (Math.random() - 0.5) * 1.5,
+        radius: 1.5 + Math.random() * 2.5,
+        baseRadius: 1.5 + Math.random() * 2.5,
+        colorIdx: Math.floor(Math.random() * 3),
+        angle: Math.random() * Math.PI * 2,
+        dist: 40 + Math.random() * 180,
+        speed: 0.005 + Math.random() * 0.015,
+        life: Math.random() * 100,
+        maxLife: 60 + Math.random() * 100,
+      }));
+    }
+
+    // Ballistics decay settings
+    const attackRate = settings.decaySpeed === 'fast' ? 0.9 : settings.decaySpeed === 'studio' ? 0.75 : 0.45;
+    const decayRate = settings.decaySpeed === 'fast' ? 0.78 : settings.decaySpeed === 'studio' ? 0.88 : 0.94;
+    const gainFactor = settings.gain;
+
+    // Glow intensity settings in px
+    let glowBlur = 0;
+    if (settings.glowIntensity === 'subtle') glowBlur = 6;
+    else if (settings.glowIntensity === 'intense') glowBlur = 14;
+    else if (settings.glowIntensity === 'extreme') glowBlur = 24;
 
     const render = () => {
       animationFrameId.current = requestAnimationFrame(render);
@@ -58,16 +282,22 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
       const w = rect.width;
       const h = rect.height;
 
-      // Dark translucent backdrop with slight phosphor persistence
-      ctx.fillStyle = mode === 'waterfall' ? 'rgba(7, 11, 20, 0.95)' : 'rgba(7, 11, 20, 0.35)';
+      // Dark translucent backdrop for phosphorus trails
+      if (settings.mode === 'waterfall') {
+        ctx.fillStyle = 'rgba(7, 11, 20, 0.95)';
+      } else if (settings.mode === 'oscilloscope' || settings.mode === 'lissajous') {
+        ctx.fillStyle = 'rgba(5, 8, 15, 0.28)';
+      } else {
+        ctx.fillStyle = 'rgba(7, 11, 20, 0.38)';
+      }
       ctx.fillRect(0, 0, w, h);
 
-      // Horizontal reference dB lines (-12dB, -24dB, -36dB)
-      if (mode !== 'waterfall' && mode !== 'radial') {
+      // Horizontal reference dB lines
+      if (settings.showGrid && settings.mode !== 'waterfall' && settings.mode !== 'radial' && settings.mode !== 'tunnel' && settings.mode !== 'orb' && settings.mode !== 'particles') {
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
         ctx.lineWidth = 1;
-        [-12, -24, -36].forEach((db) => {
-          const y = h * (1 - (db + 75) / 75);
+        [-6, -12, -24, -36].forEach((db) => {
+          const y = h * (1 - (db + 60) / 60);
           ctx.beginPath();
           ctx.moveTo(0, y);
           ctx.lineTo(w, y);
@@ -77,15 +307,15 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
 
       // Check if playback is idle or volume is muted
       if (!isPlaying || masterVolume <= 0.005) {
-        // Smoothly decay any lingering bars to zero (no jumping or waving)
         for (let i = 0; i < BARS_COUNT; i++) {
           smoothBars.current[i] = Math.max(0, smoothBars.current[i] * 0.82 - 2);
           peakHoldBars.current[i] = Math.max(0, peakHoldBars.current[i] * 0.82 - 2);
         }
         setPeakDb(-60);
+        setStereoCorr(1.0);
 
         // Quiet flat studio reference baseline
-        ctx.strokeStyle = 'rgba(71, 85, 105, 0.25)';
+        ctx.strokeStyle = 'rgba(71, 85, 105, 0.2)';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(0, h - 2);
@@ -113,31 +343,46 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
       (analyser as any).getByteFrequencyData(freqArray);
       (analyser as any).getByteTimeDomainData(timeArray);
 
-      // 2. Measure TRUE real-time peak dBFS directly from PCM timeArray
+      // 2. Measure TRUE real-time peak dBFS
       let peakSample = 0;
+      let leftEnergy = 0;
+      let rightEnergy = 0;
+
       for (let i = 0; i < bufferLength; i++) {
         const sample = Math.abs((timeArray[i] - 128) / 128.0);
         if (sample > peakSample) peakSample = sample;
+
+        // Approximate stereo correlation / phase
+        if (i % 2 === 0) leftEnergy += sample;
+        else rightEnergy += sample;
       }
+
       const realDb = peakSample > 0.002
         ? Math.min(0, Math.max(-60, Math.round(20 * Math.log10(peakSample))))
         : -60;
       setPeakDb(realDb);
 
-      // 3. True Logarithmic 64-Band RTA Binning (20 Hz to 20,000 Hz)
+      const totalEnergy = leftEnergy + rightEnergy;
+      if (totalEnergy > 0.05) {
+        const corr = Math.max(-1, Math.min(1, (1 - Math.abs(leftEnergy - rightEnergy) / totalEnergy) * 2 - 1));
+        setStereoCorr(corr);
+      }
+
+      // 3. True Logarithmic ISO RTA Binning (20 Hz to 20,000 Hz)
       const audioCtx = audioEngine.getAudioContext();
       const sampleRate = audioCtx ? audioCtx.sampleRate : 48000;
-      const binHz = (sampleRate / 2) / bufferLength; // e.g. ~46.875 Hz per bin
+      const binHz = (sampleRate / 2) / bufferLength;
+
+      let bassEnergy = 0;
+      let highEnergy = 0;
 
       for (let i = 0; i < BARS_COUNT; i++) {
-        // Exact standard ISO logarithmic frequency limits for bar i:
         const fLow = 20 * Math.pow(1000, i / BARS_COUNT);
         const fHigh = 20 * Math.pow(1000, (i + 1) / BARS_COUNT);
 
         const binStart = Math.max(1, Math.min(bufferLength - 1, Math.floor(fLow / binHz)));
         const binEnd = Math.max(binStart, Math.min(bufferLength - 1, Math.ceil(fHigh / binHz)));
 
-        // Extract real peak energy across this exact frequency window from the hardware FFT
         let bandPeak = 0;
         for (let b = binStart; b <= binEnd; b++) {
           if (freqArray[b] > bandPeak) {
@@ -145,115 +390,168 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
           }
         }
 
-        // Professional meter ballistics: rapid attack (0.75), natural linear/exponential decay
+        // Apply gain factor
+        bandPeak = Math.min(255, bandPeak * gainFactor);
+
+        if (i < BARS_COUNT * 0.2) bassEnergy += bandPeak;
+        if (i > BARS_COUNT * 0.7) highEnergy += bandPeak;
+
+        // Ballistics calculation
         const prev = smoothBars.current[i] || 0;
         const smoothed = bandPeak > prev
-          ? prev * 0.25 + bandPeak * 0.75
-          : Math.max(0, prev * 0.88 - 1.5);
+          ? prev * (1 - attackRate) + bandPeak * attackRate
+          : Math.max(0, prev * decayRate - 1.2);
         smoothBars.current[i] = smoothed;
       }
 
-      // --- RENDERING MODES ---
+      bassEnergy = bassEnergy / (BARS_COUNT * 0.2 * 255);
+      highEnergy = highEnergy / (BARS_COUNT * 0.3 * 255);
 
-      if (mode === 'spectrum') {
-        // Mode 1: Espectro RTA (Real-Time Analyzer 64-Bands)
-        const barWidth = Math.max(2, (w - (BARS_COUNT - 1) * 2) / BARS_COUNT);
+      const colors = activePalette.gradient;
+
+      // ========================================================
+      // 10 HIGH-END VISUALIZATION RENDERING ENGINES
+      // ========================================================
+
+      if (settings.mode === 'spectrum') {
+        // --- MODO 1: ESPECTRO RTA (ISO 32/64/128 Bandas con Picos de Estudio) ---
+        const isMirror = settings.mirrorMode;
+        const count = isMirror ? Math.floor(BARS_COUNT / 2) : BARS_COUNT;
+        const barSpacing = count > 64 ? 1 : 2;
+        const barWidth = Math.max(1.5, (w - (BARS_COUNT - 1) * barSpacing) / BARS_COUNT);
 
         for (let i = 0; i < BARS_COUNT; i++) {
           const val = smoothBars.current[i];
           const normIdx = i / BARS_COUNT;
-          const barHeight = Math.max(0, (val / 255) * (h - 20));
-          const x = i * (barWidth + 2);
+          const barHeight = Math.max(0, (val / 255) * (h - 22));
+
+          let x = 0;
+          if (isMirror) {
+            const halfW = w / 2;
+            const midIdx = Math.floor(BARS_COUNT / 2);
+            if (i < midIdx) {
+              x = halfW - (midIdx - i) * (barWidth + barSpacing);
+            } else {
+              x = halfW + (i - midIdx) * (barWidth + barSpacing);
+            }
+          } else {
+            x = i * (barWidth + barSpacing);
+          }
+
           const y = h - barHeight - 2;
 
           if (barHeight > 0.5) {
-            // Studio Gradient: Cyan -> Emerald -> Gold/Rose on high energy
             const grad = ctx.createLinearGradient(0, h, 0, y);
-            grad.addColorStop(0, 'rgba(6, 182, 212, 0.25)');
-            grad.addColorStop(0.5, themeColor);
-            if (normIdx < 0.25) {
-              grad.addColorStop(1, '#38BDF8');
-            } else if (normIdx < 0.65) {
-              grad.addColorStop(1, '#34D399');
-            } else {
-              grad.addColorStop(1, '#FBBF24');
-            }
+            grad.addColorStop(0, `${colors[0]}40`);
+            grad.addColorStop(0.5, colors[1]);
+            grad.addColorStop(1, normIdx < 0.3 ? colors[0] : normIdx < 0.7 ? colors[1] : colors[2]);
 
             ctx.fillStyle = grad;
+            if (glowBlur > 0) {
+              ctx.shadowColor = colors[1];
+              ctx.shadowBlur = glowBlur * 0.6;
+            }
             ctx.beginPath();
             ctx.roundRect(x, y, barWidth, barHeight, [2, 2, 0, 0]);
             ctx.fill();
+            ctx.shadowBlur = 0;
           }
 
-          // Ballistic Peak-Hold Markers with gravity fall
-          let currentPeak = peakHoldBars.current[i] || 0;
-          if (barHeight > currentPeak) {
-            currentPeak = barHeight;
-          } else {
-            currentPeak = Math.max(0, currentPeak - 0.75); // gravity decay
-          }
-          peakHoldBars.current[i] = currentPeak;
+          // Peak Hold
+          if (settings.peakHold) {
+            let currentPeak = peakHoldBars.current[i] || 0;
+            if (barHeight > currentPeak) {
+              currentPeak = barHeight;
+            } else {
+              currentPeak = Math.max(0, currentPeak - 0.75);
+            }
+            peakHoldBars.current[i] = currentPeak;
 
-          if (currentPeak > 4) {
-            const peakY = h - currentPeak - 3;
-            ctx.fillStyle = currentPeak > (h - 24) ? '#F87171' : '#FFFFFF';
-            ctx.fillRect(x, Math.max(2, peakY), barWidth, 1.5);
+            if (currentPeak > 4) {
+              const peakY = h - currentPeak - 3;
+              ctx.fillStyle = currentPeak > (h - 24) ? '#EF4444' : '#FFFFFF';
+              ctx.fillRect(x, Math.max(2, peakY), barWidth, 1.5);
+            }
           }
         }
-      } else if (mode === 'curve') {
-        // Mode 2: Curva Suave FFT (Analog Studio Spline with glow)
-        ctx.beginPath();
-        ctx.moveTo(0, h);
-
+      } else if (settings.mode === 'curve') {
+        // --- MODO 2: CURVA FFT SUAVE (Estudio Spline con Relleno y Resplandor) ---
         const points: { x: number; y: number }[] = [];
+        const isMirror = settings.mirrorMode;
         const step = w / (BARS_COUNT - 1);
 
         for (let i = 0; i < BARS_COUNT; i++) {
           const val = smoothBars.current[i];
-          const barHeight = Math.max(0, (val / 255) * (h - 22));
-          points.push({ x: i * step, y: h - barHeight });
+          const barHeight = Math.max(0, (val / 255) * (h - 24));
+          points.push({ x: i * step, y: isMirror ? h / 2 - barHeight / 2 : h - barHeight });
         }
 
-        // Draw smooth Bezier curve through points
-        ctx.moveTo(points[0].x, points[0].y);
-        for (let i = 0; i < points.length - 1; i++) {
-          const xc = (points[i].x + points[i + 1].x) / 2;
-          const yc = (points[i].y + points[i + 1].y) / 2;
-          ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+        ctx.beginPath();
+        if (isMirror) {
+          ctx.moveTo(points[0].x, points[0].y);
+          for (let i = 0; i < points.length - 1; i++) {
+            const xc = (points[i].x + points[i + 1].x) / 2;
+            const yc = (points[i].y + points[i + 1].y) / 2;
+            ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+          }
+          // Mirror bottom half
+          for (let i = points.length - 1; i >= 0; i--) {
+            const val = smoothBars.current[i];
+            const barHeight = Math.max(0, (val / 255) * (h - 24));
+            const yBottom = h / 2 + barHeight / 2;
+            if (i === points.length - 1) ctx.lineTo(points[i].x, yBottom);
+            else {
+              const xc = (points[i].x + points[i + 1].x) / 2;
+              const yc = h / 2 + (barHeight / 2);
+              ctx.quadraticCurveTo(points[i].x, yBottom, xc, yc);
+            }
+          }
+          ctx.closePath();
+        } else {
+          ctx.moveTo(0, h);
+          ctx.lineTo(points[0].x, points[0].y);
+          for (let i = 0; i < points.length - 1; i++) {
+            const xc = (points[i].x + points[i + 1].x) / 2;
+            const yc = (points[i].y + points[i + 1].y) / 2;
+            ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+          }
+          ctx.lineTo(w, h);
+          ctx.closePath();
         }
-        ctx.lineTo(w, h);
-        ctx.lineTo(0, h);
-        ctx.closePath();
 
-        // Gradient fill
+        // Fill
         const curveGrad = ctx.createLinearGradient(0, 0, 0, h);
-        curveGrad.addColorStop(0, `${themeColor}66`);
-        curveGrad.addColorStop(0.7, `${themeColor}15`);
+        curveGrad.addColorStop(0, `${colors[1]}55`);
+        curveGrad.addColorStop(0.5, `${colors[0]}22`);
         curveGrad.addColorStop(1, 'transparent');
         ctx.fillStyle = curveGrad;
         ctx.fill();
 
-        // Stroke line with glow
+        // Stroke with glow
         ctx.lineWidth = 2.5;
-        ctx.strokeStyle = themeColor;
-        ctx.shadowColor = themeColor;
-        ctx.shadowBlur = 8;
+        ctx.strokeStyle = colors[0];
+        if (glowBlur > 0) {
+          ctx.shadowColor = activePalette.glow;
+          ctx.shadowBlur = glowBlur;
+        }
         ctx.stroke();
         ctx.shadowBlur = 0;
-      } else if (mode === 'oscilloscope') {
-        // Mode 3: Osciloscopio Estéreo (Real-Time PCM Waveform from Master Bus)
+      } else if (settings.mode === 'oscilloscope') {
+        // --- MODO 3: OSCILOSCOPIO PCM ANALÓGICO CON FÓSFORO PERSISTENTE ---
         ctx.lineWidth = 2;
-        ctx.strokeStyle = themeColor;
-        ctx.shadowColor = themeColor;
-        ctx.shadowBlur = 6;
+        ctx.strokeStyle = colors[0];
+        if (glowBlur > 0) {
+          ctx.shadowColor = activePalette.glow;
+          ctx.shadowBlur = glowBlur;
+        }
         ctx.beginPath();
 
         const sliceWidth = w / bufferLength;
         let x = 0;
 
         for (let i = 0; i < bufferLength; i++) {
-          const v = (timeArray[i] - 128) / 128.0; // -1.0 to 1.0 (authentic PCM sample)
-          const y = h / 2 - (v * (h * 0.42));
+          const v = (timeArray[i] - 128) / 128.0;
+          const y = h / 2 - v * (h * 0.42);
 
           if (i === 0) ctx.moveTo(x, y);
           else ctx.lineTo(x, y);
@@ -263,11 +561,19 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
 
         ctx.stroke();
         ctx.shadowBlur = 0;
-      } else if (mode === 'waterfall') {
-        // Mode 4: Espectrograma en Cascada (Cascading Sonogram / Heatmap)
+
+        // Center zero-crossing line
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, h / 2);
+        ctx.lineTo(w, h / 2);
+        ctx.stroke();
+      } else if (settings.mode === 'waterfall') {
+        // --- MODO 4: CASCADA ESPECTRAL 3D / SONOGRAMA TERMOGRÁFICO ---
         const currentSnapshot = Array.from(smoothBars.current);
         waterfallHistory.current.unshift(currentSnapshot);
-        if (waterfallHistory.current.length > 36) {
+        if (waterfallHistory.current.length > 40) {
           waterfallHistory.current.pop();
         }
 
@@ -284,35 +590,39 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
             const val = rowData[c] / 255;
             const x = c * colWidth;
 
-            // Heatmap color: Deep Navy -> Cyan -> Emerald -> Gold
             if (val > 0.7) {
-              ctx.fillStyle = `rgba(245, 158, 11, ${alpha * val})`;
-            } else if (val > 0.4) {
-              ctx.fillStyle = `rgba(16, 185, 129, ${alpha * val})`;
-            } else if (val > 0.15) {
-              ctx.fillStyle = `rgba(6, 182, 212, ${alpha * val})`;
+              ctx.fillStyle = `rgba(${parseInt(colors[2].slice(1, 3), 16) || 250}, ${parseInt(colors[2].slice(3, 5), 16) || 204}, ${parseInt(colors[2].slice(5, 7), 16) || 21}, ${alpha * val})`;
+            } else if (val > 0.35) {
+              ctx.fillStyle = `rgba(${parseInt(colors[1].slice(1, 3), 16) || 236}, ${parseInt(colors[1].slice(3, 5), 16) || 72}, ${parseInt(colors[1].slice(5, 7), 16) || 153}, ${alpha * val})`;
+            } else if (val > 0.1) {
+              ctx.fillStyle = `rgba(${parseInt(colors[0].slice(1, 3), 16) || 6}, ${parseInt(colors[0].slice(3, 5), 16) || 182}, ${parseInt(colors[0].slice(5, 7), 16) || 212}, ${alpha * val})`;
             } else {
-              ctx.fillStyle = `rgba(15, 23, 42, ${alpha * val * 0.5})`;
+              ctx.fillStyle = `rgba(15, 23, 42, ${alpha * val * 0.4})`;
             }
 
             ctx.fillRect(x, y, colWidth + 0.5, rowHeight + 0.5);
           }
         }
-      } else if (mode === 'radial') {
-        // Mode 5: Mandala Polar 360° (Circular Reactive Flux)
+      } else if (settings.mode === 'radial') {
+        // --- MODO 5: MANDALA POLAR 360° REACTIVO ---
         const cx = w / 2;
         const cy = h / 2;
-        const baseRadius = Math.min(cx, cy) * 0.45;
+        const baseRadius = Math.min(cx, cy) * 0.4;
+        const symmetry = settings.mirrorMode ? 2 : 1;
 
         ctx.lineWidth = 2;
-        ctx.strokeStyle = themeColor;
+        ctx.strokeStyle = colors[0];
+        if (glowBlur > 0) {
+          ctx.shadowColor = activePalette.glow;
+          ctx.shadowBlur = glowBlur;
+        }
         ctx.beginPath();
 
         for (let i = 0; i <= BARS_COUNT; i++) {
           const idx = i % BARS_COUNT;
           const val = smoothBars.current[idx] / 255;
-          const r = baseRadius + val * (baseRadius * 0.8);
-          const theta = (idx / BARS_COUNT) * Math.PI * 2;
+          const r = baseRadius + val * (baseRadius * 0.95);
+          const theta = (idx / BARS_COUNT) * Math.PI * 2 * symmetry;
           const x = cx + Math.cos(theta) * r;
           const y = cy + Math.sin(theta) * r;
 
@@ -322,15 +632,261 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
         ctx.closePath();
         ctx.stroke();
 
-        ctx.fillStyle = `${themeColor}15`;
+        ctx.fillStyle = `${colors[1]}20`;
         ctx.fill();
 
-        // Inner glowing core
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        // Pulsing inner nucleus
+        ctx.strokeStyle = colors[2];
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, baseRadius * 0.4 + bassEnergy * 15, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      } else if (settings.mode === 'tunnel') {
+        // --- MODO 6: TÚNEL CUÁNTICO 3D (Warp Tunnel Hiper-Espacial) ---
+        const cx = w / 2;
+        const cy = h / 2;
+        tunnelRotRef.current += 0.008 + highEnergy * 0.02;
+
+        const RINGS = 12;
+        const maxRadius = Math.max(cx, cy) * 1.3;
+
+        for (let r = 1; r <= RINGS; r++) {
+          const z = r / RINGS; // 0 (near center) to 1 (outer screen)
+          const bandIdx = Math.floor(z * (BARS_COUNT - 1));
+          const energy = (smoothBars.current[bandIdx] || 0) / 255;
+
+          const radius = Math.pow(z, 1.8) * maxRadius + energy * 25;
+          const rot = tunnelRotRef.current * (r % 2 === 0 ? 1 : -1) + z * 1.5;
+
+          ctx.strokeStyle = r > RINGS * 0.7 ? colors[0] : r > RINGS * 0.3 ? colors[1] : colors[2];
+          ctx.lineWidth = 1.5 + z * 2;
+          if (glowBlur > 0) {
+            ctx.shadowColor = activePalette.glow;
+            ctx.shadowBlur = glowBlur * z;
+          }
+
+          ctx.beginPath();
+          const sides = 6; // Hexagonal quantum tunnel
+          for (let s = 0; s <= sides; s++) {
+            const angle = (s / sides) * Math.PI * 2 + rot;
+            const px = cx + Math.cos(angle) * radius;
+            const py = cy + Math.sin(angle) * (radius * 0.65); // perspective squash
+            if (s === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.stroke();
+        }
+
+        // Bass shockwave singularity
+        ctx.fillStyle = colors[2];
+        ctx.beginPath();
+        ctx.arc(cx, cy, 3 + bassEnergy * 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      } else if (settings.mode === 'particles') {
+        // --- MODO 7: NEBULOSA GRAVITATORIA (Enjambre Cinético de Audio) ---
+        const cx = w / 2;
+        const cy = h / 2;
+        const particles = particlesRef.current;
+
+        for (let i = 0; i < particles.length; i++) {
+          const p = particles[i];
+          const bandIdx = i % BARS_COUNT;
+          const bandVal = (smoothBars.current[bandIdx] || 0) / 255;
+
+          p.angle += p.speed + bandVal * 0.02;
+          p.dist += Math.sin(p.angle * 2) * 0.5;
+
+          // Bass push outwards, gravity pulls inwards
+          const targetDist = 40 + (i / particles.length) * (Math.min(cx, cy) * 0.8) + bassEnergy * 70;
+          p.dist += (targetDist - p.dist) * 0.08;
+
+          p.x = cx + Math.cos(p.angle) * p.dist;
+          p.y = cy + Math.sin(p.angle) * (p.dist * 0.55);
+
+          p.radius = p.baseRadius * (1 + bandVal * 1.8);
+
+          const col = colors[p.colorIdx % 3];
+          ctx.fillStyle = col;
+          if (glowBlur > 0 && bandVal > 0.4) {
+            ctx.shadowColor = col;
+            ctx.shadowBlur = glowBlur * 0.8;
+          }
+
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, Math.max(1, p.radius), 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+
+          // Orbit filament connections
+          if (i > 0 && i % 4 === 0) {
+            const prevP = particles[i - 1];
+            ctx.strokeStyle = `${col}25`;
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(prevP.x, prevP.y);
+            ctx.stroke();
+          }
+        }
+      } else if (settings.mode === 'lissajous') {
+        // --- MODO 8: VECTOR SCOPE / FASE LISSAJOUS DE ESTUDIO MASTERING ---
+        const cx = w / 2;
+        const cy = h / 2;
+        const scopeRadius = Math.min(cx, cy) * 0.82;
+
+        // Reticle (Left / Right / Mid / Side Axes)
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.arc(cx, cy, baseRadius * 0.5, 0, Math.PI * 2);
+        // Crosshair +
+        ctx.moveTo(cx - scopeRadius, cy);
+        ctx.lineTo(cx + scopeRadius, cy);
+        ctx.moveTo(cx, cy - scopeRadius);
+        ctx.lineTo(cx, cy + scopeRadius);
+        // Diagonal 45 deg (L / R)
+        ctx.moveTo(cx - scopeRadius * 0.7, cy - scopeRadius * 0.7);
+        ctx.lineTo(cx + scopeRadius * 0.7, cy + scopeRadius * 0.7);
+        ctx.moveTo(cx - scopeRadius * 0.7, cy + scopeRadius * 0.7);
+        ctx.lineTo(cx + scopeRadius * 0.7, cy - scopeRadius * 0.7);
         ctx.stroke();
+
+        // Scope boundary circle
+        ctx.beginPath();
+        ctx.arc(cx, cy, scopeRadius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Lissajous curve with 45-degree rotation
+        ctx.lineWidth = 1.8;
+        ctx.strokeStyle = colors[0];
+        if (glowBlur > 0) {
+          ctx.shadowColor = activePalette.glow;
+          ctx.shadowBlur = glowBlur;
+        }
+        ctx.beginPath();
+
+        const samplesToDraw = Math.min(bufferLength, 256);
+        for (let i = 0; i < samplesToDraw - 1; i++) {
+          const l = (timeArray[i] - 128) / 128.0;
+          const r = (timeArray[(i + 16) % bufferLength] - 128) / 128.0;
+
+          // 45-degree rotation: x = (l - r) * 0.707, y = (l + r) * 0.707
+          const px = cx + (l - r) * 0.707 * scopeRadius * 1.2;
+          const py = cy - (l + r) * 0.707 * scopeRadius * 1.2;
+
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Correlation meter badge on canvas
+        const corrX = w - 85;
+        const corrY = h - 14;
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.7)';
+        ctx.fillRect(corrX - 4, corrY - 12, 80, 16);
+        ctx.fillStyle = stereoCorr > 0.5 ? '#10B981' : stereoCorr > 0 ? '#FBBF24' : '#EF4444';
+        ctx.font = '9px monospace';
+        ctx.fillText(`FASE: ${stereoCorr.toFixed(2)}`, corrX, corrY);
+      } else if (settings.mode === 'terrain') {
+        // --- MODO 9: MALLA 3D TERRENO SYNTHWAVE RETRO-FUTURISTA ---
+        terrainOffsetRef.current = (terrainOffsetRef.current + 1.2) % 20;
+        const horizonY = h * 0.32;
+        const GRID_LINES = 14;
+        const COLS = 24;
+
+        // Ground perspective grid lines (horizontal rolling forward)
+        for (let r = 0; r < GRID_LINES; r++) {
+          const normY = (r * 20 + terrainOffsetRef.current) / (GRID_LINES * 20);
+          const y = horizonY + Math.pow(normY, 2) * (h - horizonY);
+
+          ctx.strokeStyle = `${colors[1]}${Math.floor(normY * 180).toString(16).padStart(2, '0')}`;
+          ctx.lineWidth = 1 + normY * 1.5;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+          ctx.stroke();
+        }
+
+        // Longitudinal lines modulated by frequency bands
+        for (let c = 0; c <= COLS; c++) {
+          const normX = c / COLS;
+          const startX = w / 2 + (normX - 0.5) * (w * 0.15); // near vanishing point
+          const endX = normX * w;
+
+          const bandIdx = Math.floor(Math.abs(normX - 0.5) * 2 * (BARS_COUNT - 1));
+          const elevation = ((smoothBars.current[bandIdx] || 0) / 255) * (h * 0.4);
+
+          ctx.strokeStyle = colors[0];
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(startX, horizonY);
+
+          const midX = (startX + endX) / 2;
+          const midY = (horizonY + h) / 2 - elevation;
+          ctx.quadraticCurveTo(midX, midY, endX, h);
+          ctx.stroke();
+        }
+
+        // Horizon line with glow
+        ctx.strokeStyle = colors[2];
+        ctx.lineWidth = 2;
+        if (glowBlur > 0) {
+          ctx.shadowColor = colors[2];
+          ctx.shadowBlur = glowBlur;
+        }
+        ctx.beginPath();
+        ctx.moveTo(0, horizonY);
+        ctx.lineTo(w, horizonY);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      } else if (settings.mode === 'orb') {
+        // --- MODO 10: PÚLSAR SOLAR DE PLASMA BIOMECÁNICO ---
+        const cx = w / 2;
+        const cy = h / 2;
+        orbPulseRef.current += 0.02 + bassEnergy * 0.05;
+
+        const baseCoreRadius = Math.min(cx, cy) * 0.28;
+        const coreRadius = baseCoreRadius + bassEnergy * 25;
+
+        // Plasma Corona Rays
+        const RAYS = 36;
+        for (let i = 0; i < RAYS; i++) {
+          const angle = (i / RAYS) * Math.PI * 2 + orbPulseRef.current * 0.5;
+          const bandIdx = i % BARS_COUNT;
+          const energy = (smoothBars.current[bandIdx] || 0) / 255;
+          const flareLen = coreRadius + energy * (baseCoreRadius * 1.4);
+
+          ctx.strokeStyle = i % 2 === 0 ? colors[1] : colors[2];
+          ctx.lineWidth = 1.5 + energy * 3;
+          if (glowBlur > 0) {
+            ctx.shadowColor = colors[1];
+            ctx.shadowBlur = glowBlur * 0.8;
+          }
+
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(angle) * coreRadius, cy + Math.sin(angle) * coreRadius);
+          ctx.lineTo(cx + Math.cos(angle) * flareLen, cy + Math.sin(angle) * flareLen);
+          ctx.stroke();
+        }
+
+        // Glowing Star Core
+        const coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreRadius);
+        coreGrad.addColorStop(0, '#FFFFFF');
+        coreGrad.addColorStop(0.4, colors[0]);
+        coreGrad.addColorStop(0.8, colors[1]);
+        coreGrad.addColorStop(1, 'transparent');
+
+        ctx.fillStyle = coreGrad;
+        if (glowBlur > 0) {
+          ctx.shadowColor = activePalette.glow;
+          ctx.shadowBlur = glowBlur * 1.5;
+        }
+        ctx.beginPath();
+        ctx.arc(cx, cy, coreRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
       }
     };
 
@@ -342,94 +898,133 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [mode, themeColor, isPlaying, tracks, masterVolume, masterFilter]);
+  }, [settings, activePalette, isPlaying, masterVolume, tracks]);
+
+  // Mode button config list
+  const visualizerModesList: { mode: VisualizerMode; label: string; icon: any; desc: string }[] = [
+    { mode: 'spectrum', label: 'Espectro', icon: BarChart2, desc: 'RTA 32/64/128 Bandas con Picos de Estudio' },
+    { mode: 'curve', label: 'Curva FFT', icon: Activity, desc: 'Spline analógico suave y continuo con glow' },
+    { mode: 'oscilloscope', label: 'Onda PCM', icon: Waves, desc: 'Osciloscopio analógico en tiempo real' },
+    { mode: 'waterfall', label: 'Cascada', icon: Layers, desc: 'Sonograma termográfico 3D histórico' },
+    { mode: 'radial', label: 'Radial', icon: Disc3, desc: 'Mandala polar 360° circular' },
+    { mode: 'tunnel', label: 'Túnel 3D', icon: Radio, desc: 'Hiper-túnel cuántico reactivo a subgraves' },
+    { mode: 'particles', label: 'Partículas', icon: Sparkles, desc: 'Nebulosa gravitatoria con enjambre cinético' },
+    { mode: 'lissajous', label: 'Fase Lissajous', icon: Crosshair, desc: 'Goniometro de fase y correlación estéreo' },
+    { mode: 'terrain', label: 'Malla 3D', icon: Grid, desc: 'Topografía wireframe retro-futurista' },
+    { mode: 'orb', label: 'Púlsar Plasma', icon: Sun, desc: 'Orbe estelar biomecánico con corona solar' },
+  ];
 
   return (
-    <div className="relative w-full h-24 sm:h-28 rounded-xl bg-slate-950/90 border border-slate-800/80 overflow-hidden shadow-xl backdrop-blur-md flex flex-col justify-between select-none">
-      {/* Top Header Overlay: Live dBFS & 5 Visualizer Modes */}
-      <div className="absolute top-2 left-2 sm:left-3 right-2 sm:right-3 z-10 flex items-center justify-between pointer-events-none gap-2">
-        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-          <div className="flex items-center gap-1 sm:gap-1.5">
+    <div
+      ref={containerRef}
+      className={`relative w-full ${heightClass} rounded-2xl bg-slate-950/95 border border-slate-800/80 shadow-2xl backdrop-blur-xl flex flex-col justify-between select-none transition-all duration-300 group overflow-hidden`}
+    >
+      {/* Dynamic Background Glow Ambient */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-20 transition-opacity duration-500 blur-3xl"
+        style={{
+          background: `radial-gradient(circle at 50% 50%, ${activePalette.glow} 0%, transparent 75%)`,
+        }}
+      />
+
+      {/* Top Header Overlay: Live dBFS, Modes & Tools Bar */}
+      <div className="absolute top-2 left-2 sm:left-3 right-2 sm:right-3 z-10 flex items-center justify-between gap-1 sm:gap-2 pointer-events-none">
+        {/* Left: Indicator, Mode badge & Live dBFS */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0 pointer-events-auto">
+          <div className="flex items-center gap-1.5">
             <span
-              className={`w-2 h-2 rounded-full ${
-                isPlaying ? 'bg-emerald-400 shadow-[0_0_8px_#10B981]' : 'bg-slate-600'
+              className={`w-2.5 h-2.5 rounded-full transition-colors ${
+                isPlaying ? 'bg-emerald-400 shadow-[0_0_10px_#10B981]' : 'bg-slate-600'
               }`}
             />
-            <span className="text-[9px] sm:text-[10px] font-bold tracking-wider uppercase text-slate-300">
-              Analizador Máster
+            <span className="text-[10px] sm:text-xs font-bold tracking-wider uppercase text-slate-200 hidden xs:inline">
+              MÁSTER
             </span>
           </div>
 
-          <span className="text-[9px] sm:text-[10px] font-mono tabular-nums text-cyan-400 font-bold bg-cyan-950/70 px-1.5 sm:px-2 py-0.5 rounded border border-cyan-800/40 shadow-inner">
+          <span className="text-[9px] sm:text-[11px] font-mono tabular-nums text-cyan-300 font-bold bg-cyan-950/80 px-2 py-0.5 rounded-md border border-cyan-800/50 shadow-inner">
             {isPlaying ? `${peakDb} dBFS` : 'STANDBY'}
           </span>
+
+          {/* Active Palette Pill */}
+          <div
+            onClick={() => {
+              setActiveTab('colors');
+              setIsSettingsOpen(true);
+            }}
+            title={`Paleta actual: ${activePalette.name} (Clic para cambiar)`}
+            className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900/80 border border-slate-800 hover:border-slate-700 cursor-pointer transition-colors text-[9px] text-slate-300"
+          >
+            <span
+              className="w-2 h-2 rounded-full"
+              style={{ backgroundColor: activePalette.primary }}
+            />
+            <span className="truncate max-w-[80px]">{activePalette.name}</span>
+          </div>
         </div>
 
-        {/* 5 Professional Mode Selector Buttons */}
-        <div className="flex items-center gap-0.5 sm:gap-1 p-0.5 bg-slate-900/95 backdrop-blur rounded-lg border border-slate-800 pointer-events-auto shadow-md shrink-0">
+        {/* Center/Right: Quick Mode Selector & Settings Button */}
+        <div className="flex items-center gap-1 pointer-events-auto">
+          {/* Quick Mode Buttons (Primary 5) */}
+          <div className="flex items-center gap-0.5 p-0.5 bg-slate-900/90 backdrop-blur rounded-lg border border-slate-800 shadow-md">
+            {visualizerModesList.slice(0, 5).map((item) => {
+              const Icon = item.icon;
+              const isActive = settings.mode === item.mode;
+              return (
+                <button
+                  key={item.mode}
+                  onClick={() => updateSettings({ mode: item.mode })}
+                  title={item.desc}
+                  className={`p-1 sm:px-2 sm:py-1 text-[10px] font-semibold rounded flex items-center gap-1 transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-slate-800 text-cyan-300 shadow-sm border border-cyan-500/40'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Icon className="w-3 h-3" />
+                  <span className="hidden lg:inline">{item.label}</span>
+                </button>
+              );
+            })}
+
+            {/* If an advanced mode (6-10) is active, show its active badge */}
+            {visualizerModesList.slice(5).some((m) => m.mode === settings.mode) && (
+              <div className="px-2 py-1 text-[10px] font-semibold rounded bg-cyan-950 text-cyan-300 border border-cyan-500/40 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-cyan-400" />
+                <span className="capitalize">{settings.mode}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Height Toggle (Compact / Medium / Tall) */}
           <button
-            onClick={() => setMode('spectrum')}
-            title="Espectro RTA (64 Bandas con Picos)"
-            className={`p-1 sm:px-2 sm:py-1 text-[10px] font-semibold rounded flex items-center gap-1 transition-all whitespace-nowrap cursor-pointer ${
-              mode === 'spectrum'
-                ? 'bg-slate-800 text-cyan-300 shadow-sm border border-cyan-500/30'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
+            onClick={() => {
+              const nextHeight: VisualizerHeight =
+                settings.heightMode === 'compact'
+                  ? 'medium'
+                  : settings.heightMode === 'medium'
+                  ? 'tall'
+                  : 'compact';
+              updateSettings({ heightMode: nextHeight });
+            }}
+            title={`Cambiar tamaño de visualizador (${settings.heightMode})`}
+            className="p-1 sm:px-2 sm:py-1 text-[10px] rounded-lg bg-slate-900/90 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white cursor-pointer flex items-center gap-1 transition-all"
           >
-            <BarChart2 className="w-3 h-3" />
-            <span className="hidden md:inline">Espectro</span>
+            {settings.heightMode === 'tall' ? (
+              <Minimize2 className="w-3 h-3 text-cyan-400" />
+            ) : (
+              <Maximize2 className="w-3 h-3 text-slate-400" />
+            )}
+            <span className="hidden xl:inline capitalize">{settings.heightMode}</span>
           </button>
 
+          {/* Master Visualizer Config Button (Opens Modal Drawer) */}
           <button
-            onClick={() => setMode('curve')}
-            title="Curva Suave FFT (Analógica Studio Spline)"
-            className={`p-1 sm:px-2 sm:py-1 text-[10px] font-semibold rounded flex items-center gap-1 transition-all whitespace-nowrap cursor-pointer ${
-              mode === 'curve'
-                ? 'bg-slate-800 text-cyan-300 shadow-sm border border-cyan-500/30'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
+            onClick={() => setIsSettingsOpen(true)}
+            className="px-2 sm:px-2.5 py-1 text-[10px] font-bold rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-lg shadow-cyan-900/30 border border-cyan-400/40 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
           >
-            <Activity className="w-3 h-3" />
-            <span className="hidden md:inline">Curva FFT</span>
-          </button>
-
-          <button
-            onClick={() => setMode('oscilloscope')}
-            title="Osciloscopio Estéreo (Forma de Onda PCM)"
-            className={`p-1 sm:px-2 sm:py-1 text-[10px] font-semibold rounded flex items-center gap-1 transition-all whitespace-nowrap cursor-pointer ${
-              mode === 'oscilloscope'
-                ? 'bg-slate-800 text-cyan-300 shadow-sm border border-cyan-500/30'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Waves className="w-3 h-3" />
-            <span className="hidden md:inline">Onda</span>
-          </button>
-
-          <button
-            onClick={() => setMode('waterfall')}
-            title="Espectrograma en Cascada (Sonograma Temporal)"
-            className={`p-1 sm:px-2 sm:py-1 text-[10px] font-semibold rounded flex items-center gap-1 transition-all whitespace-nowrap cursor-pointer ${
-              mode === 'waterfall'
-                ? 'bg-slate-800 text-cyan-300 shadow-sm border border-cyan-500/30'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Layers className="w-3 h-3" />
-            <span className="hidden md:inline">Cascada</span>
-          </button>
-
-          <button
-            onClick={() => setMode('radial')}
-            title="Mandala Polar 360°"
-            className={`p-1 sm:px-2 sm:py-1 text-[10px] font-semibold rounded flex items-center gap-1 transition-all whitespace-nowrap cursor-pointer ${
-              mode === 'radial'
-                ? 'bg-slate-800 text-cyan-300 shadow-sm border border-cyan-500/30'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Disc3 className="w-3 h-3" />
-            <span className="hidden md:inline">Radial</span>
+            <Sliders className="w-3 h-3" />
+            <span className="hidden sm:inline">Configurar</span>
           </button>
         </div>
       </div>
@@ -438,16 +1033,598 @@ export const MasterVisualizer: React.FC<MasterVisualizerProps> = ({
       <canvas ref={canvasRef} className="w-full h-full block" />
 
       {/* Frequency Guide Markers */}
-      {mode !== 'waterfall' && mode !== 'radial' && (
-        <div className="absolute bottom-1 left-2 sm:left-3 right-2 sm:right-3 flex items-center justify-between text-[7px] sm:text-[8px] font-mono tabular-nums text-slate-500 pointer-events-none select-none">
-          <span>SUB 20Hz</span>
-          <span>BASS 100Hz</span>
-          <span className="hidden sm:inline">LOW-MID 500Hz</span>
-          <span>MID 1k</span>
-          <span className="hidden sm:inline">HIGH-MID 4k</span>
-          <span>PRES 10k</span>
-          <span>AIR 20k</span>
-        </div>
+      {settings.showGrid &&
+        settings.mode !== 'waterfall' &&
+        settings.mode !== 'radial' &&
+        settings.mode !== 'tunnel' &&
+        settings.mode !== 'orb' &&
+        settings.mode !== 'particles' && (
+          <div className="absolute bottom-1.5 left-2 sm:left-4 right-2 sm:right-4 flex items-center justify-between text-[7px] sm:text-[9px] font-mono tabular-nums text-slate-500 pointer-events-none select-none">
+            <span>SUB 20Hz</span>
+            <span>BASS 80Hz</span>
+            <span className="hidden sm:inline">LOW-MID 300Hz</span>
+            <span>MID 1kHz</span>
+            <span className="hidden sm:inline">HIGH-MID 4kHz</span>
+            <span>PRES 8kHz</span>
+            <span>AIR 20kHz</span>
+          </div>
+        )}
+
+      {/* ======================================================== */}
+      {/* ADVANCED VISUALIZER CONFIGURATION MODAL / DRAWER (PORTAL) */}
+      {/* ======================================================== */}
+      {isSettingsOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-2xl max-h-[90vh] bg-slate-900/95 border border-cyan-500/40 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-100">
+            {/* Modal Header */}
+            <div className="px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/70">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-cyan-950/80 border border-cyan-500/50 flex items-center justify-center text-cyan-400">
+                  <Sliders className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                    Estudio de Visualización Acústica
+                    <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-cyan-900/60 text-cyan-300 border border-cyan-800">
+                      PRO
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Personaliza modos, paletas cromáticas, balística y presets de usuario.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsSettingsOpen(false)}
+                className="w-8 h-8 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Notification Alert if preset saved */}
+            {saveSuccessMsg && (
+              <div className="px-4 py-2 bg-emerald-950/90 border-b border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2">
+                <Check className="w-3.5 h-3.5 shrink-0" />
+                <span>{saveSuccessMsg}</span>
+              </div>
+            )}
+
+            {/* Navigation Tabs */}
+            <div className="flex border-b border-slate-800 bg-slate-950/40 px-4 gap-1 sm:gap-2 pt-2 text-xs font-semibold overflow-x-auto">
+              <button
+                onClick={() => setActiveTab('modes')}
+                className={`pb-2.5 px-3 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                  activeTab === 'modes'
+                    ? 'border-cyan-400 text-cyan-300'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <BarChart2 className="w-3.5 h-3.5" />
+                Estilos ({visualizerModesList.length})
+              </button>
+
+              <button
+                onClick={() => setActiveTab('colors')}
+                className={`pb-2.5 px-3 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                  activeTab === 'colors'
+                    ? 'border-cyan-400 text-cyan-300'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Palette className="w-3.5 h-3.5" />
+                Paletas & Glow
+              </button>
+
+              <button
+                onClick={() => setActiveTab('dynamics')}
+                className={`pb-2.5 px-3 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                  activeTab === 'dynamics'
+                    ? 'border-cyan-400 text-cyan-300'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                Dinámica & Audio
+              </button>
+
+              <button
+                onClick={() => setActiveTab('presets')}
+                className={`pb-2.5 px-3 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                  activeTab === 'presets'
+                    ? 'border-cyan-400 text-cyan-300'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                Presets ({FACTORY_VISUALIZER_PRESETS.length + userPresets.length})
+              </button>
+            </div>
+
+            {/* Modal Body Content (Scrollable) */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-6 flex-1 custom-scroll">
+              {/* TAB 1: 10 VISUALIZER MODES */}
+              {activeTab === 'modes' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                      Selecciona un estilo de visualización
+                    </span>
+                    <span className="text-[11px] text-cyan-400 font-mono">
+                      Activo: {settings.mode.toUpperCase()}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {visualizerModesList.map((item) => {
+                      const Icon = item.icon;
+                      const isSelected = settings.mode === item.mode;
+                      return (
+                        <div
+                          key={item.mode}
+                          onClick={() => updateSettings({ mode: item.mode })}
+                          className={`p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
+                            isSelected
+                              ? 'bg-cyan-950/50 border-cyan-500 shadow-md shadow-cyan-950/50'
+                              : 'bg-slate-800/40 border-slate-700/60 hover:bg-slate-800/80 hover:border-slate-600'
+                          }`}
+                        >
+                          <div
+                            className={`p-2 rounded-lg shrink-0 ${
+                              isSelected
+                                ? 'bg-cyan-500 text-slate-950'
+                                : 'bg-slate-800 text-slate-300'
+                            }`}
+                          >
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-white truncate">
+                                {item.label}
+                              </span>
+                              {isSelected && (
+                                <Check className="w-3.5 h-3.5 text-cyan-400" />
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-2">
+                              {item.desc}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: COLOR PALETTES & GLOW */}
+              {activeTab === 'colors' && (
+                <div className="space-y-6">
+                  {/* Curated Color Palettes */}
+                  <div className="space-y-3">
+                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                      Paletas Cromáticas Curadas
+                    </span>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      {COLOR_PALETTES.map((pal) => {
+                        const isSelected = settings.paletteId === pal.id;
+                        return (
+                          <div
+                            key={pal.id}
+                            onClick={() => updateSettings({ paletteId: pal.id })}
+                            className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col gap-2 ${
+                              isSelected
+                                ? 'bg-cyan-950/50 border-cyan-500 shadow-md shadow-cyan-950/50'
+                                : 'bg-slate-800/40 border-slate-700/60 hover:bg-slate-800/80 hover:border-slate-600'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-white truncate">
+                                {pal.name}
+                              </span>
+                              {isSelected && <Check className="w-3.5 h-3.5 text-cyan-400" />}
+                            </div>
+
+                            {/* Gradient Preview Bar */}
+                            <div
+                              className="w-full h-3.5 rounded-full border border-slate-700 shadow-inner"
+                              style={{
+                                background: `linear-gradient(to right, ${pal.gradient[0]}, ${pal.gradient[1]}, ${pal.gradient[2]})`,
+                              }}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Custom Palette Pickers */}
+                  <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-200">
+                        Color Personalizado (RGB)
+                      </span>
+                      <button
+                        onClick={() => updateSettings({ paletteId: 'custom' })}
+                        className={`text-[10px] px-2 py-0.5 rounded font-semibold cursor-pointer ${
+                          settings.paletteId === 'custom'
+                            ? 'bg-cyan-500 text-black'
+                            : 'bg-slate-800 text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        {settings.paletteId === 'custom' ? 'Activo' : 'Activar Personalizado'}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Primario</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={settings.customPrimary || '#06B6D4'}
+                            onChange={(e) =>
+                              updateSettings({
+                                paletteId: 'custom',
+                                customPrimary: e.target.value,
+                              })
+                            }
+                            className="w-8 h-8 rounded border border-slate-700 bg-transparent cursor-pointer"
+                          />
+                          <span className="text-[10px] font-mono text-slate-300 uppercase">
+                            {settings.customPrimary || '#06B6D4'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Secundario</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={settings.customSecondary || '#EC4899'}
+                            onChange={(e) =>
+                              updateSettings({
+                                paletteId: 'custom',
+                                customSecondary: e.target.value,
+                              })
+                            }
+                            className="w-8 h-8 rounded border border-slate-700 bg-transparent cursor-pointer"
+                          />
+                          <span className="text-[10px] font-mono text-slate-300 uppercase">
+                            {settings.customSecondary || '#EC4899'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Acento</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={settings.customAccent || '#FACC15'}
+                            onChange={(e) =>
+                              updateSettings({
+                                paletteId: 'custom',
+                                customAccent: e.target.value,
+                              })
+                            }
+                            className="w-8 h-8 rounded border border-slate-700 bg-transparent cursor-pointer"
+                          />
+                          <span className="text-[10px] font-mono text-slate-300 uppercase">
+                            {settings.customAccent || '#FACC15'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Glow / Bloom Intensity */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                      Resplandor Neón (Glow / Bloom)
+                    </span>
+                    <div className="grid grid-cols-4 gap-2">
+                      {(['none', 'subtle', 'intense', 'extreme'] as GlowIntensity[]).map((glow) => (
+                        <button
+                          key={glow}
+                          onClick={() => updateSettings({ glowIntensity: glow })}
+                          className={`p-2.5 rounded-xl border text-xs font-semibold capitalize transition-all cursor-pointer ${
+                            settings.glowIntensity === glow
+                              ? 'bg-cyan-950/80 border-cyan-400 text-cyan-300 shadow-md shadow-cyan-900/30'
+                              : 'bg-slate-800/40 border-slate-700 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {glow === 'none'
+                            ? 'Apagado'
+                            : glow === 'subtle'
+                            ? 'Sutil'
+                            : glow === 'intense'
+                            ? 'Intenso'
+                            : 'Neón Extremo'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: DYNAMICS & AUDIO PARAMETERS */}
+              {activeTab === 'dynamics' && (
+                <div className="space-y-5">
+                  {/* Visual Gain / Sensitivity */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-200">Sensibilidad / Ganancia Visual</span>
+                      <span className="font-mono text-cyan-400 font-bold">{settings.gain.toFixed(2)}x</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="3.0"
+                      step="0.05"
+                      value={settings.gain}
+                      onChange={(e) => updateSettings({ gain: parseFloat(e.target.value) })}
+                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                    />
+                    <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                      <span>0.5x (Atenuado)</span>
+                      <span>1.0x (Estándar)</span>
+                      <span>3.0x (Ultra Sensible)</span>
+                    </div>
+                  </div>
+
+                  {/* Ballistics / Decay Speed */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                      Balística & Velocidad de Caída (Decay)
+                    </span>
+                    <div className="grid grid-cols-3 gap-2.5">
+                      {(['fast', 'studio', 'smooth'] as DecaySpeed[]).map((speed) => (
+                        <button
+                          key={speed}
+                          onClick={() => updateSettings({ decaySpeed: speed })}
+                          className={`p-2.5 rounded-xl border text-xs font-semibold capitalize transition-all cursor-pointer ${
+                            settings.decaySpeed === speed
+                              ? 'bg-cyan-950/80 border-cyan-400 text-cyan-300'
+                              : 'bg-slate-800/40 border-slate-700 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {speed === 'fast'
+                            ? '⚡ Rápida (DJ)'
+                            : speed === 'studio'
+                            ? '🎯 Estudio Pro'
+                            : '🌊 Fluida / Zen'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Resolution / Bars Count */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                      Resolución Espectral FFT
+                    </span>
+                    <div className="grid grid-cols-3 gap-2.5">
+                      {([32, 64, 128] as BarsResolution[]).map((res) => (
+                        <button
+                          key={res}
+                          onClick={() => updateSettings({ barsCount: res })}
+                          className={`p-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                            settings.barsCount === res
+                              ? 'bg-cyan-950/80 border-cyan-400 text-cyan-300'
+                              : 'bg-slate-800/40 border-slate-700 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {res} Bandas
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Toggle Options: Peak Hold, Mirror, Grid */}
+                  <div className="pt-2 border-t border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-white block">
+                          Retención de Picos (Peak Hold)
+                        </span>
+                        <span className="text-[11px] text-slate-400">
+                          Marcadores balísticos de picos con caída gravitacional
+                        </span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={settings.peakHold}
+                        onChange={(e) => updateSettings({ peakHold: e.target.checked })}
+                        className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-cyan-500 accent-cyan-500 cursor-pointer"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-white block">
+                          Modo Espejo (Simetría Bilateral)
+                        </span>
+                        <span className="text-[11px] text-slate-400">
+                          Duplica la visualización desde el centro hacia los extremos
+                        </span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={settings.mirrorMode}
+                        onChange={(e) => updateSettings({ mirrorMode: e.target.checked })}
+                        className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-cyan-500 accent-cyan-500 cursor-pointer"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-white block">
+                          Rejilla de Escala & Decibelios
+                        </span>
+                        <span className="text-[11px] text-slate-400">
+                          Líneas de referencia de frecuencia y marcas de -12dB, -24dB
+                        </span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={settings.showGrid}
+                        onChange={(e) => updateSettings({ showGrid: e.target.checked })}
+                        className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-cyan-500 accent-cyan-500 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: PRESETS MANAGER (FACTORY & USER) */}
+              {activeTab === 'presets' && (
+                <div className="space-y-6">
+                  {/* Save Current Preset Form */}
+                  <form onSubmit={handleSaveCurrentPreset} className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2.5">
+                    <span className="text-xs font-bold text-slate-200 block">
+                      Guardar Configuración Actual como Preset
+                    </span>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Nombre del preset (ej: Cyberpunk Master)"
+                        value={newPresetName}
+                        onChange={(e) => setNewPresetName(e.target.value)}
+                        className="flex-1 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                      />
+                      <button
+                        type="submit"
+                        className="px-3.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        Guardar
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Factory Presets */}
+                  <div className="space-y-2.5">
+                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      Presets de Fábrica Integrados
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {FACTORY_VISUALIZER_PRESETS.map((preset) => (
+                        <div
+                          key={preset.id}
+                          onClick={() => handleApplyPreset(preset)}
+                          className="p-3 rounded-xl bg-slate-800/40 border border-slate-700/60 hover:bg-slate-800/80 hover:border-cyan-500/60 transition-all cursor-pointer flex flex-col justify-between gap-1 group/p"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-white group-hover/p:text-cyan-300 transition-colors">
+                              {preset.name}
+                            </span>
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 capitalize">
+                              {preset.settings.mode}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 line-clamp-2">
+                            {preset.description}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* User Presets */}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                        Mis Presets Guardados ({userPresets.length})
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleExportPresets}
+                          title="Exportar a archivo JSON"
+                          className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer"
+                        >
+                          <Download className="w-3 h-3" /> Exportar
+                        </button>
+                        <label
+                          title="Importar desde archivo JSON"
+                          className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer"
+                        >
+                          <Upload className="w-3 h-3" /> Importar
+                          <input
+                            type="file"
+                            accept=".json"
+                            onChange={handleImportPresets}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    {userPresets.length === 0 ? (
+                      <p className="text-xs text-slate-500 italic p-3 text-center bg-slate-950/40 rounded-xl border border-slate-800">
+                        No has guardado presets todavía. Personaliza el visualizador y haz clic en "Guardar".
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {userPresets.map((preset) => (
+                          <div
+                            key={preset.id}
+                            className="p-3 rounded-xl bg-slate-800/40 border border-slate-700/60 flex items-center justify-between gap-2"
+                          >
+                            <div
+                              onClick={() => handleApplyPreset(preset)}
+                              className="flex-1 cursor-pointer"
+                            >
+                              <span className="text-xs font-bold text-white hover:text-cyan-300 transition-colors block">
+                                {preset.name}
+                              </span>
+                              <span className="text-[10px] text-slate-400">
+                                Modo: {preset.settings.mode} • Paleta: {preset.settings.paletteId}
+                              </span>
+                            </div>
+
+                            <button
+                              onClick={() => handleDeletePreset(preset.id)}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
+                              title="Eliminar preset"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-4 py-3 bg-slate-950/90 border-t border-slate-800 flex items-center justify-between">
+              <button
+                onClick={() => updateSettings(DEFAULT_VISUALIZER_SETTINGS)}
+                className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 cursor-pointer"
+              >
+                <RotateCcw className="w-3 h-3" /> Restaurar fábrica
+              </button>
+
+              <button
+                onClick={() => setIsSettingsOpen(false)}
+                className="px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cerrar Estudio
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

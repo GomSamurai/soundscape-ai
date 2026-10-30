@@ -59,9 +59,14 @@ export class CloudStorageService {
 
   // Save project to local gallery
   public static saveProjectToGallery(project: SoundscapeProject): SoundscapeProject[] {
+    return this.updateProject(project);
+  }
+
+  // Update an existing project in the gallery
+  public static updateProject(project: SoundscapeProject): SoundscapeProject[] {
     const gallery = this.getSavedProjects();
     const index = gallery.findIndex((p) => p.id === project.id);
-    const updatedProject = {
+    const updatedProject: SoundscapeProject = {
       ...project,
       updatedAt: new Date().toISOString(),
       isPreset: false,

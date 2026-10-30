@@ -13,6 +13,7 @@ import { PresetsBar } from './components/PresetsBar';
 import { SoundSearchModal } from './components/SoundSearchModal';
 import { AISoundscapeModal } from './components/AISoundscapeModal';
 import { GalleryModal } from './components/GalleryModal';
+import { SceneEditorModal } from './components/SceneEditorModal';
 import { MultiVideoGrid } from './components/MultiVideoGrid';
 import { SpatialRadarModal } from './components/SpatialRadarModal';
 import { BinauralTunerModal } from './components/BinauralTunerModal';
@@ -45,6 +46,7 @@ import {
   Folder,
   Disc,
   Trash2,
+  Edit3,
 } from 'lucide-react';
 
 export default function App() {
@@ -95,6 +97,7 @@ export default function App() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [isSceneEditorOpen, setIsSceneEditorOpen] = useState(false);
   const [isSpatialRadarOpen, setIsSpatialRadarOpen] = useState(false);
   const [isBinauralTunerOpen, setIsBinauralTunerOpen] = useState(false);
   const [isGeminiSettingsOpen, setIsGeminiSettingsOpen] = useState(false);
@@ -679,6 +682,22 @@ export default function App() {
     setActiveProject(newSaved);
   };
 
+  const handleUpdateProjectInfo = (updatedProject: SoundscapeProject) => {
+    CloudStorageService.updateProject(updatedProject);
+    if (activeProject.id === updatedProject.id) {
+      setActiveProject(updatedProject);
+      audioEngine.setMasterVolume(updatedProject.masterVolume ?? 0.85);
+      youtubeManager.setMasterVolume(updatedProject.masterVolume ?? 0.85);
+      audioEngine.setMasterReverb(updatedProject.masterReverb ?? 0.3);
+      audioEngine.setMasterFilterCutoff(updatedProject.masterFilter ?? 20000);
+      updatedProject.channels.forEach((track) => {
+        audioEngine.syncChannel(track, updatedProject.channels, updatedProject.buses);
+      });
+    }
+    setToastNotice(`Escena "${updatedProject.name}" actualizada con éxito.`);
+    setTimeout(() => setToastNotice(null), 3000);
+  };
+
   const youtubeVideoCount = activeProject.channels.filter(
     (t) => t.type === 'youtube_video'
   ).length;
@@ -735,6 +754,13 @@ export default function App() {
               <h1 className="text-sm sm:text-base font-extrabold text-white tracking-tight truncate max-w-xs sm:max-w-md">
                 {activeProject.name}
               </h1>
+              <button
+                onClick={() => setIsSceneEditorOpen(true)}
+                title="Editar todos los campos de información de esta escena"
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-cyan-300 transition-colors cursor-pointer"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+              </button>
             </div>
 
             {/* Quick Preset Selector Dropdown */}
@@ -1349,6 +1375,21 @@ export default function App() {
         onClose={() => setIsGalleryOpen(false)}
         onLoadProject={handleLoadProject}
         onSaveCurrentAsNew={handleSaveCurrentAsNew}
+        onUpdateActiveProject={handleUpdateProjectInfo}
+      />
+
+      <SceneEditorModal
+        isOpen={isSceneEditorOpen}
+        project={activeProject}
+        onClose={() => setIsSceneEditorOpen(false)}
+        onSave={handleUpdateProjectInfo}
+        onSaveAsNew={(newProj) => {
+          CloudStorageService.saveProjectToGallery(newProj);
+          setActiveProject(newProj);
+          setToastNotice(`Nueva copia "${newProj.name}" creada con éxito.`);
+          setTimeout(() => setToastNotice(null), 3000);
+        }}
+        onLoadAndApply={handleLoadProject}
       />
 
       <SpatialRadarModal

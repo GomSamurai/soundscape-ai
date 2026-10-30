@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { SoundscapeProject } from '../types/soundscape';
 import { CloudStorageService } from '../services/cloudStorage';
+import { SceneEditorModal } from './SceneEditorModal';
 import {
   FolderHeart,
   Cloud,
@@ -13,6 +14,7 @@ import {
   Save,
   Clock,
   Sparkles,
+  Edit3,
 } from 'lucide-react';
 
 interface GalleryModalProps {
@@ -21,6 +23,7 @@ interface GalleryModalProps {
   onClose: () => void;
   onLoadProject: (project: SoundscapeProject) => void;
   onSaveCurrentAsNew: (name: string, description: string) => void;
+  onUpdateActiveProject?: (project: SoundscapeProject) => void;
 }
 
 export const GalleryModal: React.FC<GalleryModalProps> = ({
@@ -29,6 +32,7 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
   onClose,
   onLoadProject,
   onSaveCurrentAsNew,
+  onUpdateActiveProject,
 }) => {
   const [projects, setProjects] = useState<SoundscapeProject[]>(() =>
     CloudStorageService.getSavedProjects()
@@ -37,6 +41,7 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
   const [saveDesc, setSaveDesc] = useState(activeProject.description || '');
   const [isSaving, setIsSaving] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const [editingProject, setEditingProject] = useState<SoundscapeProject | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const reloadProjects = () => {
@@ -55,6 +60,23 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
   const handleDelete = (id: string) => {
     const updated = CloudStorageService.deleteProject(id);
     setProjects(updated);
+  };
+
+  const handleSaveEditedProject = (updatedProject: SoundscapeProject) => {
+    CloudStorageService.updateProject(updatedProject);
+    reloadProjects();
+    if (onUpdateActiveProject && activeProject.id === updatedProject.id) {
+      onUpdateActiveProject(updatedProject);
+    }
+    setSyncStatus(`Escena "${updatedProject.name}" guardada con éxito.`);
+    setTimeout(() => setSyncStatus(null), 3000);
+  };
+
+  const handleSaveAsNewFromEditor = (newProject: SoundscapeProject) => {
+    CloudStorageService.saveProjectToGallery(newProject);
+    reloadProjects();
+    setSyncStatus(`Copia creada: "${newProject.name}".`);
+    setTimeout(() => setSyncStatus(null), 3000);
   };
 
   const handleSyncToCloud = async (project: SoundscapeProject) => {
@@ -274,22 +296,33 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
 
                 {/* Actions row */}
                 <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t border-slate-800/80">
-                  <button
-                    onClick={() => {
-                      onLoadProject(proj);
-                      onClose();
-                    }}
-                    className="px-3.5 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-semibold flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Cargar en Suite</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        onLoadProject(proj);
+                        onClose();
+                      }}
+                      className="px-3.5 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-semibold flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <span>Cargar en Suite</span>
+                    </button>
+
+                    <button
+                      onClick={() => setEditingProject(proj)}
+                      title="Editar todos los campos de información, parámetros master y canales de esta escena"
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-cyan-300 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-700/80 hover:border-cyan-500/50 cursor-pointer shadow-sm"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Editar</span>
+                    </button>
+                  </div>
 
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => handleSyncToCloud(proj)}
                       title="Sincronizar este proyecto en la nube"
-                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-cyan-300 transition-colors"
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-cyan-300 transition-colors cursor-pointer"
                     >
                       <Cloud className="w-3.5 h-3.5" />
                     </button>
@@ -297,7 +330,7 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
                     <button
                       onClick={() => handleExportSingle(proj)}
                       title="Exportar archivo JSON de alta fidelidad"
-                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-cyan-300 transition-colors"
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-cyan-300 transition-colors cursor-pointer"
                     >
                       <Download className="w-3.5 h-3.5" />
                     </button>
@@ -306,7 +339,7 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
                       <button
                         onClick={() => handleDelete(proj.id)}
                         title="Eliminar de la galería"
-                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition-colors"
+                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -318,6 +351,20 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
           )}
         </div>
       </div>
+
+      {/* Dedicated Scene Editor Modal */}
+      <SceneEditorModal
+        isOpen={editingProject !== null}
+        project={editingProject}
+        onClose={() => setEditingProject(null)}
+        onSave={handleSaveEditedProject}
+        onSaveAsNew={handleSaveAsNewFromEditor}
+        onLoadAndApply={(p) => {
+          handleSaveEditedProject(p);
+          onLoadProject(p);
+          onClose();
+        }}
+      />
     </div>
   );
 };
